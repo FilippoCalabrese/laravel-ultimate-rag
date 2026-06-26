@@ -9,6 +9,14 @@ Embedding turns chunk text into dense vectors. The engine ships **ten** drivers
 behind one contract, every call is cached and its cost tracked, and you switch
 provider with a single config line — no code changes.
 
+::: callout info "In plain words"
+An *embedding model* reads a piece of text and returns a list of numbers (a
+*vector*) that captures its meaning. Texts that mean similar things get similar
+vectors — that's what makes semantic search work. New to this? See
+**[What is RAG?](/getting-started/what-is-rag)**. This page is about *which*
+embedding model to use and how to configure it.
+:::
+
 ```php
 use Sellinnate\RagEngine\Facades\Rag;
 
@@ -111,19 +119,46 @@ Rag::index($document, $chunks, ['embedder' => 'openai']);
 
 ## Caching, retries & cost
 
-- Repeated text is never re-embedded (FR-EM-05). The cache key is
+- Repeated text is never re-embedded. The cache key is
   `tenant + provider + model + dimensions + text`, so providers and tenants never
   share entries.
 - HTTP providers retry transient failures (429/5xx) with exponential backoff and
   fail fast on non-retryable errors (401/400). Toggle per provider with
   `cache` / `retries` config flags.
-- Every call records tokens + cost per tenant (FR-EM-07); set `cost_per_1k` per
-  provider to price it.
+- Every call records tokens + cost per tenant; set `cost_per_1k` per provider to
+  price it.
 
 ::: callout info "Vector/chunk alignment is guaranteed"
 If a provider returns fewer vectors than inputs, the engine raises an error
 rather than silently mis-aligning embeddings to chunks. OpenAI-style responses
 are also re-ordered by their `index` field for safety.
+:::
+
+## Best practices
+
+- **Never ship the `fake` embedder.** It's for tests only — it doesn't capture
+  meaning, so search will look random.
+- **Use the same embedder for indexing and querying.** Vectors from different
+  models (or different `dimensions`) aren't comparable. If you switch models,
+  **re-index your whole corpus**.
+- **Prefer EU-resident / self-hosted providers** (Ollama, Mistral, Jina,
+  Azure-EU) when content is sensitive or regulated.
+- **Set `dimensions` deliberately.** Smaller vectors = less storage and faster
+  search, at some accuracy cost. The v3 models let you trade this off.
+- **Set `input_type`/`task`** for providers that support it (Cohere, Voyage,
+  Jina) so documents and queries are embedded asymmetrically — it measurably
+  improves retrieval.
+- **Keep caching on** — re-embedding identical text is pure waste.
+
+## Common pitfalls
+
+::: callout warning
+- **Mixed models in one namespace.** Indexing with model A then querying with
+  model B yields garbage. One namespace = one embedding model.
+- **Changed `dimensions`?** That's a new vector shape — re-index; the store
+  rejects mismatched dimensions on purpose.
+- **Missing API key.** A real provider with an empty `api_key` fails fast with a
+  clear error; set the env var (see [credentials](#credentials)).
 :::
 
 ## Embedding Eloquent models

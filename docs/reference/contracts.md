@@ -8,6 +8,14 @@ description: "The public interfaces that make up the engine's stable API."
 All contracts live in the `Sellinnate\RagEngine\Contracts` namespace and follow
 SemVer: they do not change without a major release.
 
+::: callout info "What this page is for"
+A **contract** is a PHP `interface`. Each one lists the methods a driver must
+implement. You read this page when you want to **write your own driver** (see
+**[Custom drivers](/guides/custom-drivers)**) — it's the checklist of methods to
+implement. For everyday use you call the `Rag` facade, not these interfaces
+directly.
+:::
+
 ## Embedder
 
 ```php

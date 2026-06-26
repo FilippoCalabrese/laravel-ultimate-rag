@@ -1,71 +1,175 @@
 ---
 title: "Retrieval & search"
-description: "Fluent semantic search with hybrid, MMR, reranking and context expansion."
+description: "Find the most relevant chunks for a query — with filters, hybrid search, MMR, reranking and context expansion, explained option by option."
 ---
 
 # Retrieval & search
 
-Retrieval is a fluent, driver-agnostic pipeline. Tenant scoping is mandatory and
-fail-closed — a query is **always** scoped to the current tenant.
+Retrieval is the part your users feel: they ask something, and they get back the
+most relevant chunks. It's a **fluent builder** — you start with
+`Rag::search($text)` and chain options, then call `->get()`.
 
-## The fluent builder
+::: callout info "In plain words"
+You give it a question in plain language; it returns the passages that best
+answer it, ranked by relevance. Under the hood it embeds your question into a
+vector and asks the vector store for the nearest chunk-vectors — but you don't
+need to think about any of that. New here?
+**[What is RAG?](/getting-started/what-is-rag)** explains the ideas.
+:::
+
+## The simplest search
 
 ```php
 use Sellinnate\RagEngine\Facades\Rag;
 
-$hits = Rag::search('how does envelope encryption work?')
-    ->topK(5)
-    ->threshold(0.3)
-    ->where('source', 'handbook')   // metadata filter (FR-RT-04)
-    ->hybrid()                       // vector + BM25 with RRF (FR-RT-03)
-    ->mmr(0.6)                       // diversify results (FR-RT-05)
-    ->rerank()                       // cross-encoder rerank (FR-RR-01)
-    ->expandParents()                // small-to-big context (FR-RT-07)
-    ->contextBudget(2000)            // token-aware budget (FR-RR-04)
-    ->get();
+$hits = Rag::search('how do refunds work?')->topK(5)->get();
 
 foreach ($hits as $hit) {
-    $hit->score;                 // relevance
-    $hit->content;               // chunk text
-    $hit->documentId;            // provenance (FR-RT-06)
-    $hit->metadata;              // tags, heading, parent_content, ...
+    $hit->score;       // relevance (higher = more relevant)
+    $hit->content;     // the chunk text
+    $hit->documentId;  // which Document it came from
+    $hit->metadata;    // tags, heading, source_ref, parent_content, ...
 }
 ```
 
-## Indexing
+`->get()` returns an array of `SearchHit` objects. `->first()` returns the top
+one (or `null`); `->count()` returns how many matched.
 
-Before searching, index a document's chunks:
+## Every option, explained
+
+Chain only what you need — each method returns the builder:
+
+| Method | What it does | When to use |
+|---|---|---|
+| `->topK(5)` | Return the 5 best chunks. | Always — pick how many results you want. |
+| `->threshold(0.4)` | Drop hits below this relevance score. | Cut low-quality noise before showing users. |
+| `->where('tag', 'handbook')` | Keep only chunks whose metadata `tag` equals `handbook`. | Scope to a subset (by type, owner, source…). |
+| `->filter([...])` | Apply several metadata conditions at once. | Multiple filters together. |
+| `->hybrid()` | Combine semantic + keyword search (merged with RRF). | Queries with exact terms/codes/names. |
+| `->mmr(0.6)` | Diversify results so they're not near-duplicates. | When top hits are too similar. |
+| `->rerank()` | Re-score the top hits with a more accurate model. | Squeeze out maximum precision. |
+| `->expandParents()` | Replace matched child chunks with their larger parents. | With parent-child chunking, for context. |
+| `->contextBudget(2000)` | Trim results to fit this many tokens. | Feeding results to an LLM. |
+| `->dedup()` | Remove duplicate/near-identical chunks. | Noisy corpora with repeated text. |
+| `->fetch(50)` | How many candidates to pull *before* rerank/MMR trim to `topK`. | Tune recall vs cost. |
+| `->using('openai')` | Use a specific embedder for the query. | Match the one you indexed with. |
+| `->store('qdrant')` | Query a specific vector store. | Override the default backend. |
+| `->namespace('...')` | Search a specific namespace. | Advanced multi-namespace setups. |
+
+### A fully-loaded example
 
 ```php
-$document = Rag::ingest(Rag::source()->text($body));
-$chunks   = Rag::chunk($parsed, ['parent_child' => true]);
+$hits = Rag::search('how does envelope encryption work?')
+    ->topK(5)             // 5 results
+    ->threshold(0.3)      // ignore weak matches
+    ->where('source', 'handbook')
+    ->hybrid()            // semantic + keyword
+    ->mmr(0.6)            // diversify
+    ->rerank()            // precision pass
+    ->expandParents()     // small-to-big context
+    ->contextBudget(2000) // fits an LLM prompt
+    ->get();
+```
+
+::: callout tip "Start simple, add options only when needed"
+`->topK()` + `->threshold()` covers most apps. Reach for `hybrid`, `mmr` and
+`rerank` to fix specific symptoms (missed exact terms, repetitive results, almost-
+right ranking) — not by default.
+:::
+
+## Understanding the advanced options
+
+- **Hybrid search** runs your query through *both* semantic (vector) and keyword
+  (BM25) search, then fuses the two ranked lists with **RRF (Reciprocal Rank
+  Fusion)**. It rescues queries where exact tokens matter — error codes, names,
+  acronyms — that pure semantic search can miss.
+- **MMR (Maximal Marginal Relevance)** re-orders results to balance relevance
+  with *variety*. The number (0–1) is how much to favour relevance over
+  diversity; `0.6` leans relevant. Use it when your top 5 are five rewordings of
+  the same sentence.
+- **Reranking** sends the top candidates to a slower, more accurate model (a
+  *cross-encoder*) that reads the query and each chunk together. It noticeably
+  improves the final ordering at some latency/cost.
+- **Parent expansion** (`expandParents`) pairs with parent-child
+  [chunking](/concepts/chunking): you match on precise small chunks but return
+  their larger parents so the answer has context.
+
+## Indexing (so there's something to search)
+
+A document must be processed before it can be retrieved. Either use the high-level
+flow:
+
+```php
+$document = Rag::ingest(Rag::source()->text($body, ['document_key' => 'doc-1']));
+Rag::process($document);                    // parse → chunk → embed → store
+```
+
+…or, if you already have a parsed document and chunks, index them directly:
+
+```php
+$chunks = Rag::chunk($parsed, ['parent_child' => true]);
 Rag::index($document, $chunks);
 ```
 
-Re-indexing a document **atomically replaces** its prior generation: the new
-vectors are written before the old ones are removed, so a failure mid-way never
-destroys a working index (FR-AF-05).
+::: callout info "Re-indexing is safe"
+Re-indexing a document **atomically replaces** its previous generation: new
+vectors are written *before* the old ones are removed, so a failure half-way
+never leaves you with a broken or empty index.
+:::
 
-## Multi-tenant isolation
+## Multi-tenant isolation is automatic
+
+Every search is **always** scoped to the current tenant — you cannot accidentally
+search across tenants.
 
 ```php
-// Authorized cross-tenant access sets the context (and restores it after):
+// To search as another (authorized) tenant, set the context explicitly:
 $results = Rag::forTenant('tenant-42', fn () => Rag::search('q')->get());
 ```
 
-::: callout warning "Scope cannot be widened from the query"
-There is intentionally no `forTenant()` on the search builder. A `tenant_id`
-filter on a query can never override the ambient tenant — the engine overwrites
-it with the current tenant. Cross-tenant isolation is a tested invariant.
+::: callout warning "You cannot widen scope from a query"
+There is intentionally no `forTenant()` on the search builder, and a `tenant_id`
+in `->where(...)` can never override the ambient tenant — the engine overwrites
+it with the current one. Cross-tenant isolation is a tested invariant, not a
+convention. See **[Multi-tenancy](/concepts/multi-tenancy)**.
 :::
 
-## Backends
+## Choosing a vector store
 
-| Driver | Backend |
-|---|---|
-| `memory` | in-process (tests, dev) |
-| `qdrant` | Qdrant (primary, EU self-hostable, ANN at scale) |
-| `pgvector` | SQL-backed (Postgres/Neon/MySQL/SQLite) — small/on-prem tier; filtered brute-force scan (native ANN indexing is a future enhancement) |
+| Driver | Backend | Use when |
+|---|---|---|
+| `memory` | In-process | Tests and local dev (resets each run). |
+| `pgvector` | SQL (Postgres/Neon/MySQL/SQLite) | Small/medium corpora on your existing DB. |
+| `qdrant` | Qdrant (EU self-hostable) | Large corpora needing fast approximate search at scale. |
 
-Choose per query with `->store('qdrant')`, or set the default in config. All
-drivers share the same contract, so switching backends needs no code changes.
+Switch per query with `->store('qdrant')`, or set the default in config. All three
+share the same contract, so changing backend needs **no code changes** — only a
+re-index into the new store.
+
+## Best practices
+
+- **Always set `topK` and a `threshold`** — unbounded, unfiltered results are
+  rarely what users want.
+- **Filter early with `where()`** to keep searches scoped and fast.
+- **Query with the same embedder you indexed with.**
+- **Add `hybrid()` for keyword-y queries**, `rerank()` when ranking is "almost
+  right", `mmr()` when results repeat.
+- **Use `contextBudget()` before feeding an LLM** so you never overflow its
+  context window.
+
+## Common pitfalls
+
+::: callout warning
+- **Empty results?** The document may not be processed yet, or your `threshold`
+  is too high.
+- **Irrelevant results?** Likely the `fake` embedder — switch to a real one.
+- **Expecting cross-tenant results?** They won't appear; that's by design.
+- **`rerank()` does nothing?** A reranker driver must be configured
+  (`RAG_RERANKER`); the default is `null`.
+:::
+
+## Next
+
+- **[Generation (RAG)](/concepts/generation)** — turn retrieved chunks into a
+  written answer.
+- **[Orchestration & jobs](/concepts/orchestration)** — index at scale.

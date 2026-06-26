@@ -1,54 +1,109 @@
 ---
 title: "Parsing & formats"
-description: "Supported formats, structure preservation and security hardening."
+description: "How raw files become clean text the engine can index — supported formats, structure preservation, and security."
 ---
 
 # Parsing & formats
 
-Parsing extracts normalized text plus logical structure from a source. Each
-format is a pluggable `Parser` driver resolved by MIME type — adding a format is
-an isolated addition, never a change to the pipeline (FR-PA-13).
+**Parsing** is the very first step of indexing: it takes a raw source (a PDF's
+bytes, an HTML page, a CSV) and produces **clean, normalized text plus its
+logical structure** (headings, tables, pages). Everything downstream — chunking,
+embedding, search — works on that clean text, never the raw bytes.
 
-## Built-in parsers
+::: callout info "In plain words"
+Different file formats store text in wildly different ways. A parser is a
+translator that reads one format and hands back plain text the rest of the engine
+can understand — while throwing away noise (HTML `<script>` tags, formatting
+markup) and remembering structure (which line was a heading).
+:::
 
-| Format | Driver | Notes |
-|---|---|---|
-| Plain text | `PlainTextParser` | pass-through |
-| Markdown | `MarkdownParser` | heading hierarchy → sections |
-| HTML | `HtmlParser` | script/style stripped, sanitized DOM |
-| XML | `XmlParser` | XXE-hardened |
-| CSV / TSV | `CsvParser` | table structure preserved (header-paired cells) |
-| JSON | `JsonParser` | flattened to `path: value` lines |
-| DOCX | `DocxParser` | OOXML via ZipArchive, no external dep |
-| PDF | `PdfParser` | text PDFs via optional `smalot/pdfparser` |
+## How a parser is chosen
+
+Each format is a separate `Parser` driver, picked automatically by the source's
+**MIME type** (the standard "type tag" for content, like `text/csv` or
+`application/pdf`). You normally never call a parser directly — `Rag::process()`
+does it for you — but you can:
 
 ```php
 use Sellinnate\RagEngine\Facades\Rag;
 
-$doc = Rag::parser()->parse($bytes, 'text/csv');
-$doc->text;       // header-paired text
-$doc->sections;   // structural sections (headings, tables, pages)
-$doc->language;   // detected after preprocessing
+$parsed = Rag::parser()->parse($bytes, 'text/csv');
+
+$parsed->text;       // the normalized, header-paired text
+$parsed->sections;   // structural parts: headings, table rows, PDF pages…
+$parsed->language;   // detected language (filled in during preprocessing)
 ```
 
-## Structure preservation
+## Built-in parsers
 
-Parsers keep logical structure as `DocumentSection`s — headings with levels,
-table rows, PDF pages — rather than flattening it (FR-PA-09/10). Structure-aware
-chunkers use these boundaries.
+| Format | MIME type | Notes |
+|---|---|---|
+| Plain text | `text/plain` | Pass-through. |
+| Markdown | `text/markdown` | Heading hierarchy becomes sections. |
+| HTML | `text/html` | `<script>`/`<style>` stripped; DOM sanitized; no network access. |
+| XML | `application/xml` | Hardened against XXE attacks (see below). |
+| CSV / TSV | `text/csv` | Each cell paired with its column header, so rows stay meaningful. |
+| JSON | `application/json` | Flattened to readable `path: value` lines. |
+| DOCX | `application/vnd…wordprocessingml…` | Word files, read via PHP's `ZipArchive` — no external tools. |
+| PDF | `application/pdf` | Text-based PDFs, via the optional `smalot/pdfparser` package. |
 
-## Security hardening (FR-SEC-08)
+::: callout tip "PDFs are text, not images"
+A PDF parser extracts the *text layer* of a PDF. A scanned document (an image of
+text) has no text layer, so it parses to nothing — that needs OCR, which is out
+of scope here. If you must support scans, OCR them to text first, then ingest the
+text.
+:::
 
-- **XML/XXE**: external entity resolution is disabled and any DOCTYPE is
-  rejected — including UTF-16-encoded DOCTYPEs that evade naive byte checks.
-- **HTML**: parsed with no network access; scripts and styles removed.
-- **DOCX/zip-bomb**: total uncompressed size is capped (20 MB default) and only
-  the fixed `word/document.xml` entry is read — no attacker-controlled paths.
+## Structure is preserved, not flattened
 
-## Registering a new format
+Parsers keep a document's logical structure as a list of **`DocumentSection`**
+objects — headings with their level, individual table rows, PDF pages. This is
+what lets structure-aware chunkers (like the Markdown chunker) split on real
+boundaries instead of mid-sentence. See **[Chunking](/concepts/chunking)**.
+
+## Security hardening
+
+Parsing **untrusted** files is a classic attack surface. The built-in parsers are
+hardened against the common file-parsing exploits:
+
+- **XXE (XML External Entity)** — a malicious XML file can try to make your server
+  read local files or call internal URLs via "external entities". The XML parser
+  **disables external entities and rejects any `DOCTYPE`** — including sneaky
+  UTF-16-encoded ones.
+- **Zip bombs (DOCX)** — a tiny `.docx` can decompress to gigabytes. The DOCX
+  parser **caps total uncompressed size** (20 MB by default) and reads only the
+  fixed `word/document.xml` entry, never attacker-chosen paths.
+- **HTML** — parsed with **no network access**; scripts and styles are removed
+  before text extraction.
+
+::: callout warning "Always treat ingested files as untrusted"
+These protections are on by default, but the safest posture is still to validate
+uploads (size, MIME, source) at your application boundary before handing them to
+ingestion.
+:::
+
+## Adding your own format
+
+Parsing is extensible — register a parser for a new MIME type and it slots in
+without touching the pipeline:
 
 ```php
 use Sellinnate\RagEngine\Parsing\ParserManager;
 
 app(ParserManager::class)->register(new MyEpubParser);
+// The last parser registered for a given MIME type wins.
 ```
+
+Full walkthrough: **[Custom drivers](/guides/custom-drivers)**.
+
+## Best practices
+
+- **Send the correct MIME type** when ingesting from raw bytes, so the right
+  parser is chosen.
+- **OCR scanned PDFs** to text before ingesting them.
+- **Cap upload sizes** in your app, in addition to the engine's built-in limits.
+
+## Next
+
+- **[Preprocessing & PII](/concepts/preprocessing)** — what happens to the text
+  after parsing.
