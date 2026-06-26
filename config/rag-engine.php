@@ -22,7 +22,20 @@ return [
         'kms' => env('RAG_KMS', 'local'),
         'tokenizer' => env('RAG_TOKENIZER', 'approximate'),
         'llm' => env('RAG_LLM', 'null'),
+        'chunker' => env('RAG_CHUNK_STRATEGY', 'recursive'),
         'distance_metric' => env('RAG_DISTANCE_METRIC', 'cosine'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Chunking strategies (FR-CH)
+    |--------------------------------------------------------------------------
+    */
+    'chunkers' => [
+        'fixed' => ['driver' => 'fixed'],
+        'recursive' => ['driver' => 'recursive'],
+        'sentence' => ['driver' => 'sentence'],
+        'markdown' => ['driver' => 'markdown'],
     ],
 
     /*
@@ -170,6 +183,10 @@ return [
         'chunk_size' => 1000,
         'chunk_overlap' => 200,
         'max_tokens' => 512,
+        // Prepend document/section context to each chunk before embedding (FR-CH-08).
+        'contextual_headers' => true,
+        // Small-to-big parent-child chunking (FR-CH-07).
+        'parent_child' => false,
     ],
 
     /*

@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Sellinnate\RagEngine;
 
+use Sellinnate\RagEngine\Chunking\ChunkingService;
 use Sellinnate\RagEngine\Contracts\Embedder;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
 use Sellinnate\RagEngine\Contracts\Llm;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
+use Sellinnate\RagEngine\Data\EmbeddingResponse;
+use Sellinnate\RagEngine\Data\ParsedDocument;
+use Sellinnate\RagEngine\Data\TextChunk;
+use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Ingestion\IngestionSource;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
 use Sellinnate\RagEngine\Ingestion\SourceFactory;
@@ -43,7 +48,40 @@ final class RagEngine
         private readonly SourceFactory $sources,
         private readonly Ingestor $ingestor,
         private readonly ParserManager $parsers,
+        private readonly ChunkingService $chunking,
+        private readonly EmbeddingService $embedding,
     ) {}
+
+    public function chunking(): ChunkingService
+    {
+        return $this->chunking;
+    }
+
+    public function embedding(): EmbeddingService
+    {
+        return $this->embedding;
+    }
+
+    /**
+     * Chunk a parsed document (FR-CH).
+     *
+     * @param  array<string, mixed>  $options
+     * @return list<TextChunk>
+     */
+    public function chunk(ParsedDocument $document, array $options = []): array
+    {
+        return $this->chunking->chunk($document, $options);
+    }
+
+    /**
+     * Embed texts with caching + cost tracking (FR-EM).
+     *
+     * @param  list<string>  $texts
+     */
+    public function embed(array $texts, ?string $provider = null): EmbeddingResponse
+    {
+        return $this->embedding->embed($texts, $provider);
+    }
 
     public function source(): SourceFactory
     {
