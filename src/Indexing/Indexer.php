@@ -1,0 +1,165 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sellinnate\RagEngine\Indexing;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Sellinnate\RagEngine\Data\EmbeddingResponse;
+use Sellinnate\RagEngine\Data\TextChunk;
+use Sellinnate\RagEngine\Data\VectorRecord;
+use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Events\ChunksEmbedded;
+use Sellinnate\RagEngine\Events\DocumentIndexed;
+use Sellinnate\RagEngine\Managers\VectorStoreManager;
+use Sellinnate\RagEngine\Models\Chunk;
+use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Models\EmbeddingRecord;
+use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
+
+/**
+ * Persists chunks and indexes their vectors (bridges chunking → vector store).
+ *
+ * - Chunk text is envelope-encrypted at rest (FR-SEC-01); the plaintext lives in
+ *   the vector store payload, which sits inside the tenant perimeter (FR-SEC-06).
+ * - Re-indexing a document atomically replaces its prior chunks/vectors (FR-AF-05,
+ *   FR-IN-08).
+ * - Parent chunks (parent-child) are persisted for context expansion but only
+ *   children are embedded/searched (FR-CH-07, FR-RT-07).
+ */
+final class Indexer
+{
+    public function __construct(
+        private readonly EmbeddingService $embedding,
+        private readonly VectorStoreManager $stores,
+        private readonly EnvelopeEncrypter $encrypter,
+    ) {}
+
+    /**
+     * @param  list<TextChunk>  $chunks
+     * @param  array<string, mixed>  $options
+     */
+    public function index(Document $document, array $chunks, array $options = []): int
+    {
+        $namespace = (string) ($options['namespace'] ?? 'documents');
+        $tenantId = $document->tenant_id;
+        $store = $this->stores->driver($options['store'] ?? null);
+
+        // May throw on a dimension change — before any mutation (fail-closed).
+        $store->createNamespace($namespace, $this->embedding->embed([])->dimensions ?: 8, $options['metric'] ?? 'cosine');
+
+        // Pre-generate stable ids so vectors and rows agree.
+        $rowIds = [];
+        foreach ($chunks as $chunk) {
+            $rowIds[$chunk->index] = (string) Str::uuid();
+        }
+
+        $children = array_values(array_filter($chunks, fn (TextChunk $c): bool => ($c->metadata['is_parent'] ?? false) === false));
+
+        // 1. Embed FIRST — the failure-prone step — before destroying anything.
+        $response = $children === []
+            ? null
+            : $this->embedding->embed(array_map(static fn (TextChunk $c): string => $c->embeddableText(), $children), $options['embedder'] ?? null);
+
+        // 2. Upsert the NEW vectors (new ids) before removing the old generation,
+        //    so a failure here leaves the prior index intact (FR-AF-05).
+        $records = $this->buildRecords($children, $rowIds, $response, $document, $tenantId, $namespace);
+        if ($records !== []) {
+            $store->upsert($namespace, $records);
+        }
+
+        // 3. Swap chunk rows in one transaction (old out, new in).
+        $oldChunkIds = Chunk::where('document_id', $document->id)->pluck('id')->all();
+
+        DB::transaction(function () use ($chunks, $children, $rowIds, $response, $document, $tenantId, $namespace, $options): void {
+            Chunk::where('document_id', $document->id)->delete();
+
+            foreach ($chunks as $chunk) {
+                Chunk::create([
+                    'id' => $rowIds[$chunk->index],
+                    'document_id' => $document->id,
+                    'tenant_id' => $tenantId,
+                    'encrypted_content' => json_encode($this->encrypter->encrypt($chunk->content, $tenantId)->toArray(), JSON_THROW_ON_ERROR),
+                    'content' => null,
+                    'position' => $chunk->index,
+                    'offset' => $chunk->offset,
+                    'metadata' => $chunk->metadata,
+                    'parent_chunk_id' => $chunk->parentIndex !== null ? ($rowIds[$chunk->parentIndex] ?? null) : null,
+                    'token_count' => $chunk->tokenCount,
+                ]);
+            }
+
+            if ($response !== null) {
+                foreach ($children as $child) {
+                    EmbeddingRecord::create([
+                        'chunk_id' => $rowIds[$child->index],
+                        'tenant_id' => $tenantId,
+                        'model' => $response->model,
+                        'dimensions' => $response->dimensions,
+                        'provider' => $options['embedder'] ?? 'default',
+                        'vector_ref' => $namespace.':'.$rowIds[$child->index],
+                        'cost' => 0,
+                    ]);
+                }
+            }
+
+            $document->forceFill(['status' => 'indexed'])->save();
+        });
+
+        // 4. Now the new generation is committed — drop the old vectors.
+        if ($oldChunkIds !== []) {
+            $store->delete($namespace, array_values(array_map('strval', $oldChunkIds)));
+        }
+
+        if ($children !== []) {
+            event(new ChunksEmbedded((string) $document->id, $tenantId, count($children)));
+        }
+        event(new DocumentIndexed((string) $document->id, $tenantId, $namespace));
+
+        return count($children);
+    }
+
+    /**
+     * @param  list<TextChunk>  $children
+     * @param  array<int, string>  $rowIds
+     * @return list<VectorRecord>
+     */
+    private function buildRecords(array $children, array $rowIds, ?EmbeddingResponse $response, Document $document, string $tenantId, string $namespace): array
+    {
+        if ($response === null) {
+            return [];
+        }
+
+        $records = [];
+        foreach ($children as $i => $child) {
+            $records[] = new VectorRecord(
+                id: $rowIds[$child->index],
+                vector: $response->vectorAt($i),
+                metadata: [
+                    ...$this->payloadMetadata($child),
+                    'tenant_id' => $tenantId,
+                    'document_id' => (string) $document->id,
+                    'chunk_id' => $rowIds[$child->index],
+                    'parent_chunk_id' => $child->parentIndex !== null ? ($rowIds[$child->parentIndex] ?? null) : null,
+                    'content' => $child->content,
+                    'is_parent' => false,
+                ],
+            );
+        }
+
+        return $records;
+    }
+
+    /**
+     * Chunk metadata safe to store in the vector payload (drop volatile keys).
+     *
+     * @return array<string, mixed>
+     */
+    private function payloadMetadata(TextChunk $chunk): array
+    {
+        $excluded = ['is_parent', 'parent_index', 'parent_content', 'pii_tokens', 'pii_redactions'];
+
+        return array_diff_key($chunk->metadata, array_flip($excluded));
+    }
+}

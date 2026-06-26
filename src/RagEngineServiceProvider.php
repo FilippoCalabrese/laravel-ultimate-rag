@@ -14,6 +14,7 @@ use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Indexing\Indexer;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
 use Sellinnate\RagEngine\Ingestion\SourceFactory;
 use Sellinnate\RagEngine\Managers\ChunkerManager;
@@ -37,6 +38,7 @@ use Sellinnate\RagEngine\Preprocessing\LanguageDetector;
 use Sellinnate\RagEngine\Preprocessing\PiiRedactor;
 use Sellinnate\RagEngine\Preprocessing\PreprocessingPipeline;
 use Sellinnate\RagEngine\Preprocessing\TextCleaner;
+use Sellinnate\RagEngine\Retrieval\Retriever;
 use Sellinnate\RagEngine\Security\AeadCipher;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
@@ -64,6 +66,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->registerIngestion();
         $this->registerChunking();
         $this->registerEmbedding();
+        $this->registerRetrieval();
 
         $this->app->singleton(RagEngine::class, fn ($app) => new RagEngine(
             $app->make(EmbedderManager::class),
@@ -79,6 +82,8 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(ParserManager::class),
             $app->make(ChunkingService::class),
             $app->make(EmbeddingService::class),
+            $app->make(Indexer::class),
+            $app->make(Retriever::class),
         ));
 
         $this->app->alias(RagEngine::class, 'rag-engine');
@@ -205,6 +210,24 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->app->singleton(EmbeddingService::class, fn ($app) => new EmbeddingService(
             $app->make(EmbedderManager::class),
             $app->make(UsageRecorder::class),
+        ));
+    }
+
+    private function registerRetrieval(): void
+    {
+        $this->app->singleton(Indexer::class, fn ($app) => new Indexer(
+            $app->make(EmbeddingService::class),
+            $app->make(VectorStoreManager::class),
+            $app->make(EnvelopeEncrypter::class),
+        ));
+
+        $this->app->singleton(Retriever::class, fn ($app) => new Retriever(
+            $app->make(EmbeddingService::class),
+            $app->make(VectorStoreManager::class),
+            $app->make(RerankerManager::class),
+            $app->make(TenantContext::class),
+            $app->make(Tokenizer::class),
+            $app->make(EnvelopeEncrypter::class),
         ));
     }
 

@@ -35,6 +35,16 @@ final class InMemoryVectorStore implements VectorStore
             throw new RagException("Unsupported distance metric [{$metric}].");
         }
 
+        // Changing dimensions on a populated namespace would silently corrupt
+        // scoring (mixed-dimension vectors). Reject it — re-embedding migration
+        // (FR-EM-09) is an explicit, separate flow.
+        $existing = $this->config[$namespace]['dimensions'] ?? null;
+        if ($existing !== null && $existing !== $dimensions && ($this->store[$namespace] ?? []) !== []) {
+            throw new RagException(
+                "Namespace [{$namespace}] already has {$existing} dimensions; cannot change to {$dimensions} without re-embedding."
+            );
+        }
+
         if (! isset($this->store[$namespace])) {
             $this->store[$namespace] = [];
         }
@@ -86,6 +96,14 @@ final class InMemoryVectorStore implements VectorStore
         }
 
         $metric = $this->config[$namespace]['metric'] ?? 'cosine';
+        $expectedDims = $this->config[$namespace]['dimensions'] ?? null;
+
+        if ($expectedDims !== null && count($vector) !== $expectedDims) {
+            throw new RagException(
+                'Query vector has '.count($vector)." dimensions, expected {$expectedDims} for [{$namespace}]."
+            );
+        }
+
         $filters = $this->effectiveFilters($query);
 
         $scored = [];
@@ -108,6 +126,7 @@ final class InMemoryVectorStore implements VectorStore
                 metadata: $entry['metadata'],
                 documentId: isset($entry['metadata']['document_id']) ? (string) $entry['metadata']['document_id'] : null,
                 chunkId: isset($entry['metadata']['chunk_id']) ? (string) $entry['metadata']['chunk_id'] : null,
+                vector: $entry['vector'],
             );
         }
 
