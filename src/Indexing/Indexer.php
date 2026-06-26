@@ -170,12 +170,18 @@ final class Indexer
             return [];
         }
 
+        $provenance = $this->provenanceMetadata($document);
+
         $records = [];
         foreach ($children as $i => $child) {
             $records[] = new VectorRecord(
                 id: $rowIds[$child->index],
                 vector: $response->vectorAt($i),
                 metadata: [
+                    // Document-level provenance first (lowest priority) so a chunk
+                    // is always traceable to its source — and the authoritative
+                    // system keys below can never be shadowed by it.
+                    ...$provenance,
                     ...$this->payloadMetadata($child),
                     'tenant_id' => $tenantId,
                     'document_id' => (string) $document->id,
@@ -188,6 +194,37 @@ final class Indexer
         }
 
         return $records;
+    }
+
+    /**
+     * Provenance written into every vector payload so any retrieved chunk traces
+     * back to its origin (FR-RT-06): the source type, a human-readable reference
+     * (URL / filename / logical key), and any explicit per-document propagation
+     * (e.g. an Eloquent model's `embeddable_*` identity via `rag_vector_metadata`).
+     *
+     * @return array<string, mixed>
+     */
+    private function provenanceMetadata(Document $document): array
+    {
+        /** @var array<string, mixed> $metadata */
+        $metadata = is_array($document->metadata) ? $document->metadata : [];
+
+        $provenance = ['source_type' => $document->source_type];
+
+        foreach (['url', 'filename', 'document_key', 'source_ref', 'key'] as $candidate) {
+            if (isset($metadata[$candidate]) && is_scalar($metadata[$candidate])) {
+                $provenance['source_ref'] = (string) $metadata[$candidate];
+                break;
+            }
+        }
+
+        $explicit = $metadata['rag_vector_metadata'] ?? [];
+        if (is_array($explicit)) {
+            /** @var array<string, mixed> $explicit */
+            $provenance = [...$provenance, ...$explicit];
+        }
+
+        return $provenance;
     }
 
     /**

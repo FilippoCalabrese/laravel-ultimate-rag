@@ -30,6 +30,7 @@ use Sellinnate\RagEngine\RagEngine;
  * @method static \Sellinnate\RagEngine\Generation\AskBuilder ask(string $question)
  * @method static int process(\Sellinnate\RagEngine\Models\Document $document, array<string, mixed> $options = [])
  * @method static \Sellinnate\RagEngine\Models\Document ingest(\Sellinnate\RagEngine\Ingestion\IngestionSource $source, array<string, mixed> $metadata = [])
+ * @method static \Sellinnate\RagEngine\Eloquent\ModelEmbedder models()
  * @method static mixed forTenant(string $tenantId, callable $callback)
  *
  * @see RagEngine
