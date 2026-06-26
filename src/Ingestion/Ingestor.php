@@ -11,9 +11,12 @@ use Sellinnate\RagEngine\Data\EncryptedPayload;
 use Sellinnate\RagEngine\Events\DataShredded;
 use Sellinnate\RagEngine\Events\DocumentIngested;
 use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Managers\VectorStoreManager;
 use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Models\ShreddedTenant;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
+use Sellinnate\RagEngine\Tenancy\TenantQuota;
 
 /**
  * Persists an {@see IngestionSource} as a {@see Document} with deduplication
@@ -26,6 +29,8 @@ final class Ingestor
         private readonly TenantContext $tenant,
         private readonly EnvelopeEncrypter $encrypter,
         private readonly Config $config,
+        private readonly TenantQuota $quota,
+        private readonly VectorStoreManager $stores,
     ) {}
 
     /**
@@ -36,6 +41,12 @@ final class Ingestor
         $this->assertWithinSizeLimit($source);
 
         $tenantId = $this->tenant->id();
+
+        // Refuse re-provisioning a crypto-shredded tenant (FR-SEC-04).
+        if (ShreddedTenant::query()->whereKey($tenantId)->exists()) {
+            throw new RagException("Tenant [{$tenantId}] has been crypto-shredded and cannot be re-provisioned.");
+        }
+
         $hash = $source->contentHash();
 
         // Deduplication / idempotent re-ingestion (FR-IN-06).
@@ -51,6 +62,10 @@ final class Ingestor
 
         try {
             return DB::transaction(function () use ($source, $metadata, $tenantId, $hash): Document {
+                // Quota enforced inside the write transaction to narrow the TOCTOU
+                // window against concurrent ingests (FR-MT-04).
+                $this->quota->assertCanIngest($tenantId, $source->size());
+
                 $version = $this->resolveVersion($source, $tenantId, $hash);
 
                 [$ref, $dekId] = $this->encryptContent($source->content, $tenantId);
@@ -130,6 +145,14 @@ final class Ingestor
         $tenantId = $document->tenant_id;
         $documentId = (string) $document->id;
         $wasEncrypted = $document->dek_id !== null;
+
+        // Remove the document's vectors (which hold plaintext content in the
+        // payload) from the store, not just the encrypted DB rows (C2).
+        $namespace = (string) $this->config->get('rag-engine.namespace', 'documents');
+        $store = $this->stores->driver();
+        if ($store->namespaceExists($namespace)) {
+            $store->deleteByFilter($namespace, ['document_id' => $documentId]);
+        }
 
         DB::transaction(function () use ($document): void {
             $document->chunks()->delete();

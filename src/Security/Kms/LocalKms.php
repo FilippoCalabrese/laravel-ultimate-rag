@@ -65,6 +65,13 @@ final class LocalKms implements KeyManagement
         throw new EncryptionException("Unable to unwrap the data key with KEK [{$keyId}].");
     }
 
+    public function wrapDataKey(string $keyId, string $plaintext): string
+    {
+        $this->createKey($keyId);
+
+        return $this->cipher->encrypt($this->currentKek($keyId), $plaintext);
+    }
+
     public function rotateKey(string $keyId): void
     {
         $versions = $this->store->has($keyId) ? $this->storedVersions($keyId) : [];

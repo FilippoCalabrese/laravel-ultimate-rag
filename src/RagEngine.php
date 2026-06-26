@@ -15,6 +15,8 @@ use Sellinnate\RagEngine\Data\EmbeddingResponse;
 use Sellinnate\RagEngine\Data\ParsedDocument;
 use Sellinnate\RagEngine\Data\TextChunk;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Generation\AskBuilder;
+use Sellinnate\RagEngine\Generation\RagGenerator;
 use Sellinnate\RagEngine\Indexing\Indexer;
 use Sellinnate\RagEngine\Ingestion\IngestionSource;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
@@ -27,6 +29,7 @@ use Sellinnate\RagEngine\Managers\TokenizerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
 use Sellinnate\RagEngine\Models\Document;
 use Sellinnate\RagEngine\Parsing\ParserManager;
+use Sellinnate\RagEngine\Pipeline\IngestionPipeline;
 use Sellinnate\RagEngine\Retrieval\Retriever;
 use Sellinnate\RagEngine\Retrieval\SearchBuilder;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
@@ -55,7 +58,28 @@ final class RagEngine
         private readonly EmbeddingService $embedding,
         private readonly Indexer $indexer,
         private readonly Retriever $retriever,
+        private readonly IngestionPipeline $pipeline,
+        private readonly RagGenerator $generator,
     ) {}
+
+    /**
+     * Run the full ingestion pipeline (parse → preprocess → chunk → embed →
+     * index) on an already-ingested document (FR-OR).
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function process(Document $document, array $options = []): int
+    {
+        return $this->pipeline->process($document, $options);
+    }
+
+    /**
+     * Ask a question over the corpus (optional generation layer, FR-GE).
+     */
+    public function ask(string $question): AskBuilder
+    {
+        return new AskBuilder($this->generator, $this->search($question));
+    }
 
     public function indexer(): Indexer
     {

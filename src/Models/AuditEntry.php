@@ -6,6 +6,7 @@ namespace Sellinnate\RagEngine\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use RuntimeException;
 
 /**
@@ -20,8 +21,10 @@ use RuntimeException;
  * @property string $action
  * @property string|null $target
  * @property array<string, mixed>|null $context
+ * @property int $seq
  * @property string|null $hash_prev
  * @property string $hash
+ * @property Carbon $created_at
  */
 class AuditEntry extends Model
 {
@@ -33,6 +36,7 @@ class AuditEntry extends Model
 
     protected $casts = [
         'context' => 'array',
+        'seq' => 'integer',
         'created_at' => 'datetime',
     ];
 
