@@ -27,6 +27,8 @@ use Sellinnate\RagEngine\RagEngine;
  * @method static \Sellinnate\RagEngine\Retrieval\Retriever retriever()
  * @method static int index(\Sellinnate\RagEngine\Models\Document $document, array<int, \Sellinnate\RagEngine\Data\TextChunk> $chunks, array<string, mixed> $options = [])
  * @method static \Sellinnate\RagEngine\Retrieval\SearchBuilder search(string $text)
+ * @method static \Sellinnate\RagEngine\Generation\AskBuilder ask(string $question)
+ * @method static int process(\Sellinnate\RagEngine\Models\Document $document, array<string, mixed> $options = [])
  * @method static \Sellinnate\RagEngine\Models\Document ingest(\Sellinnate\RagEngine\Ingestion\IngestionSource $source, array<string, mixed> $metadata = [])
  * @method static mixed forTenant(string $tenantId, callable $callback)
  *

@@ -33,6 +33,12 @@ interface KeyManagement
     public function unwrapDataKey(string $keyId, string $wrappedKey): string;
 
     /**
+     * Wrap a plaintext DEK with the current KEK version. Used to re-wrap DEKs
+     * during key rotation (FR-SEC-05) without re-ingesting content.
+     */
+    public function wrapDataKey(string $keyId, string $plaintext): string;
+
+    /**
      * Rotate the KEK identified by $keyId, creating a new key version while
      * leaving existing wrapped DEKs unwrappable via re-wrap (FR-SEC-05).
      */

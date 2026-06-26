@@ -48,6 +48,8 @@
         { "title": "Chunking", "path": "/concepts/chunking", "icon": "scissors" },
         { "title": "Embedding", "path": "/concepts/embedding", "icon": "binary" },
         { "title": "Retrieval & search", "path": "/concepts/retrieval", "icon": "search" },
+        { "title": "Generation (RAG)", "path": "/concepts/generation", "icon": "message-circle" },
+        { "title": "Orchestration & jobs", "path": "/concepts/orchestration", "icon": "workflow" },
         { "title": "Security & BYOK", "path": "/concepts/security", "icon": "shield" },
         { "title": "Multi-tenancy", "path": "/concepts/multi-tenancy", "icon": "users" }
       ]

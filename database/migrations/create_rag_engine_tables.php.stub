@@ -97,9 +97,25 @@ return new class extends Migration
             $table->string('action')->index();
             $table->string('target')->nullable();
             $table->json('context')->nullable();
+            $table->unsignedBigInteger('seq')->default(0)->index();
             $table->string('hash_prev', 64)->nullable();
             $table->string('hash', 64);
             $table->timestamp('created_at')->index();
+        });
+
+        // Per-tenant chain anchor (high-water mark) — detects truncation /
+        // wholesale deletion of audit entries (NFR-CO-03).
+        Schema::create($tables['audit_anchors'], function (Blueprint $table) {
+            $table->string('tenant_id')->primary();
+            $table->unsignedBigInteger('seq')->default(0);
+            $table->string('head_hash', 64)->nullable();
+            $table->timestamp('updated_at')->nullable();
+        });
+
+        Schema::create($tables['shredded_tenants'], function (Blueprint $table) {
+            $table->string('tenant_id')->primary();
+            $table->string('reason')->nullable();
+            $table->timestamp('shredded_at');
         });
 
         // Enforce audit immutability at the database layer (NFR-CO-03). Model-level

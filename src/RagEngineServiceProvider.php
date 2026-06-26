@@ -5,8 +5,15 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine;
 
 use Illuminate\Http\Client\Factory;
+use Sellinnate\RagEngine\Audit\AuditLogger;
 use Sellinnate\RagEngine\Chunking\ChunkingService;
 use Sellinnate\RagEngine\Chunking\ContextualHeaderEnricher;
+use Sellinnate\RagEngine\Console\ClearCacheCommand;
+use Sellinnate\RagEngine\Console\PurgeCommand;
+use Sellinnate\RagEngine\Console\ReconcileCommand;
+use Sellinnate\RagEngine\Console\RotateKeysCommand;
+use Sellinnate\RagEngine\Console\StatsCommand;
+use Sellinnate\RagEngine\Console\StatusCommand;
 use Sellinnate\RagEngine\Contracts\Embedder;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
 use Sellinnate\RagEngine\Contracts\Llm;
@@ -14,6 +21,8 @@ use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Generation\ContextAssembler;
+use Sellinnate\RagEngine\Generation\RagGenerator;
 use Sellinnate\RagEngine\Indexing\Indexer;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
 use Sellinnate\RagEngine\Ingestion\SourceFactory;
@@ -34,14 +43,19 @@ use Sellinnate\RagEngine\Parsing\ParserManager;
 use Sellinnate\RagEngine\Parsing\PdfParser;
 use Sellinnate\RagEngine\Parsing\PlainTextParser;
 use Sellinnate\RagEngine\Parsing\XmlParser;
+use Sellinnate\RagEngine\Pipeline\IngestionPipeline;
 use Sellinnate\RagEngine\Preprocessing\LanguageDetector;
 use Sellinnate\RagEngine\Preprocessing\PiiRedactor;
 use Sellinnate\RagEngine\Preprocessing\PreprocessingPipeline;
 use Sellinnate\RagEngine\Preprocessing\TextCleaner;
+use Sellinnate\RagEngine\Recovery\Reconciler;
 use Sellinnate\RagEngine\Retrieval\Retriever;
 use Sellinnate\RagEngine\Security\AeadCipher;
+use Sellinnate\RagEngine\Security\CryptoShredder;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
+use Sellinnate\RagEngine\Security\KeyRotationService;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
+use Sellinnate\RagEngine\Tenancy\TenantQuota;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -52,7 +66,15 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $package
             ->name('rag-engine')
             ->hasConfigFile()
-            ->hasMigration('create_rag_engine_tables');
+            ->hasMigration('create_rag_engine_tables')
+            ->hasCommands([
+                StatusCommand::class,
+                StatsCommand::class,
+                RotateKeysCommand::class,
+                PurgeCommand::class,
+                ReconcileCommand::class,
+                ClearCacheCommand::class,
+            ]);
     }
 
     public function packageRegistered(): void
@@ -67,6 +89,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->registerChunking();
         $this->registerEmbedding();
         $this->registerRetrieval();
+        $this->registerOrchestration();
 
         $this->app->singleton(RagEngine::class, fn ($app) => new RagEngine(
             $app->make(EmbedderManager::class),
@@ -84,6 +107,8 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(EmbeddingService::class),
             $app->make(Indexer::class),
             $app->make(Retriever::class),
+            $app->make(IngestionPipeline::class),
+            $app->make(RagGenerator::class),
         ));
 
         $this->app->alias(RagEngine::class, 'rag-engine');
@@ -182,11 +207,59 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(Factory::class),
         ));
 
+        $this->app->singleton(TenantQuota::class, fn ($app) => new TenantQuota(
+            $app->make('config'),
+            $app->make(UsageRecorder::class),
+        ));
+
         $this->app->singleton(Ingestor::class, fn ($app) => new Ingestor(
             $app->make(TenantContext::class),
             $app->make(EnvelopeEncrypter::class),
             $app->make('config'),
+            $app->make(TenantQuota::class),
+            $app->make(VectorStoreManager::class),
         ));
+    }
+
+    private function registerOrchestration(): void
+    {
+        $this->app->singleton(AuditLogger::class, fn ($app) => new AuditLogger(
+            $app->make(TenantContext::class),
+        ));
+
+        $this->app->singleton(IngestionPipeline::class, fn ($app) => new IngestionPipeline(
+            $app->make(Ingestor::class),
+            $app->make(ParserManager::class),
+            $app->make(PreprocessingPipeline::class),
+            $app->make(ChunkingService::class),
+            $app->make(Indexer::class),
+        ));
+
+        $this->app->singleton(CryptoShredder::class, fn ($app) => new CryptoShredder(
+            $app->make(KeyManagement::class),
+            $app->make(Ingestor::class),
+            $app->make(AuditLogger::class),
+            $app->make(VectorStoreManager::class),
+            $app->make('config'),
+        ));
+
+        $this->app->singleton(KeyRotationService::class, fn ($app) => new KeyRotationService(
+            $app->make(KeyManagement::class),
+            $app->make(AuditLogger::class),
+        ));
+
+        $this->app->singleton(ContextAssembler::class, fn ($app) => new ContextAssembler(
+            $app->make(Tokenizer::class),
+        ));
+
+        $this->app->singleton(RagGenerator::class, fn ($app) => new RagGenerator(
+            $app->make(Retriever::class),
+            $app->make(ContextAssembler::class),
+            $app->make(LlmManager::class),
+            $app->make('config'),
+        ));
+
+        $this->app->singleton(Reconciler::class, fn () => new Reconciler);
     }
 
     private function registerChunking(): void
