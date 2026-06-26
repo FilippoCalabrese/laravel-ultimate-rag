@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Security;
 
 use Illuminate\Contracts\Config\Repository as Config;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Sellinnate\RagEngine\Audit\AuditLogger;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
+use Sellinnate\RagEngine\Embedding\CachingEmbedder;
 use Sellinnate\RagEngine\Events\DataShredded;
 use Sellinnate\RagEngine\Exceptions\RagException;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
@@ -15,6 +17,8 @@ use Sellinnate\RagEngine\Managers\VectorStoreManager;
 use Sellinnate\RagEngine\Models\Chunk;
 use Sellinnate\RagEngine\Models\DataKey;
 use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Models\EmbeddingRecord;
+use Sellinnate\RagEngine\Models\IngestionRun;
 use Sellinnate\RagEngine\Models\ShreddedTenant;
 use Sellinnate\RagEngine\Models\UsageRecord;
 
@@ -41,11 +45,21 @@ final class CryptoShredder
      */
     public function shredTenant(string $tenantId, ?string $reason = null): void
     {
-        // Vectors hold plaintext content in their payload — erase them too (C2).
-        $namespace = (string) $this->config->get('rag-engine.namespace', 'documents');
+        // Vectors hold plaintext content in their payload — erase them from EVERY
+        // namespace the tenant was indexed into, plus the configured default (C2).
+        $namespaces = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->whereNotNull('indexed_namespace')
+            ->distinct()
+            ->pluck('indexed_namespace')
+            ->all();
+        $namespaces[] = (string) $this->config->get('rag-engine.namespace', 'documents');
+
         $store = $this->stores->driver();
-        if ($store->namespaceExists($namespace)) {
-            $store->deleteByFilter($namespace, ['tenant_id' => $tenantId]);
+        foreach (array_unique($namespaces) as $namespace) {
+            if ($store->namespaceExists((string) $namespace)) {
+                $store->deleteByFilter((string) $namespace, ['tenant_id' => $tenantId]);
+            }
         }
 
         DB::transaction(function () use ($tenantId): void {
@@ -53,10 +67,22 @@ final class CryptoShredder
             Document::where('tenant_id', $tenantId)->delete();
             DataKey::where('tenant_id', $tenantId)->delete();
             UsageRecord::where('tenant_id', $tenantId)->delete();
+            EmbeddingRecord::where('tenant_id', $tenantId)->delete();
+            IngestionRun::where('tenant_id', $tenantId)->delete();
         });
 
         // Destroying the KEK makes every value wrapped by it unrecoverable.
         $this->kms->destroyKey($tenantId);
+
+        // Evict the tenant's cached embeddings (recoverable via embedding
+        // inversion) when the cache store supports tagging; otherwise they expire.
+        try {
+            Cache::tags(
+                CachingEmbedder::tenantTag($tenantId)
+            )->flush();
+        } catch (\Throwable) {
+            // Non-taggable cache store: entries expire by TTL.
+        }
 
         ShreddedTenant::query()->updateOrCreate(
             ['tenant_id' => $tenantId],

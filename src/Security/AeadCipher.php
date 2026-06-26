@@ -61,7 +61,9 @@ final class AeadCipher
         $raw = base64_decode($payload, true);
 
         if ($raw === false || strlen($raw) < self::IV_LENGTH + self::TAG_LENGTH) {
-            throw new EncryptionException('Malformed ciphertext payload.');
+            // Generic message (no malformed-vs-tampered distinction) to avoid an
+            // information-disclosure oracle on the ciphertext structure.
+            throw new EncryptionException('Decryption failed.');
         }
 
         $iv = substr($raw, 0, self::IV_LENGTH);
@@ -78,8 +80,9 @@ final class AeadCipher
         );
 
         if ($plaintext === false) {
-            // Wrong key (e.g. KEK rotated/destroyed) or tampered ciphertext.
-            throw new EncryptionException('Decryption failed: wrong key or tampered data.');
+            // Wrong key (e.g. KEK rotated/destroyed) or tampered ciphertext —
+            // same generic message as the malformed case (no oracle).
+            throw new EncryptionException('Decryption failed.');
         }
 
         return $plaintext;

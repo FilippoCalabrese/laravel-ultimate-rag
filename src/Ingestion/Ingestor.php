@@ -110,6 +110,15 @@ final class Ingestor
      */
     public function content(Document $document): string
     {
+        // Defence-in-depth against a confused-deputy: never decrypt a document
+        // outside its own tenant's context (M1).
+        if ($document->tenant_id !== $this->tenant->id()) {
+            throw new RagException(
+                "Cannot decrypt document [{$document->id}]: it belongs to tenant [{$document->tenant_id}], "
+                ."not the current tenant [{$this->tenant->id()}]."
+            );
+        }
+
         $ref = $document->encrypted_content_ref;
 
         if ($ref === null) {
@@ -147,8 +156,9 @@ final class Ingestor
         $wasEncrypted = $document->dek_id !== null;
 
         // Remove the document's vectors (which hold plaintext content in the
-        // payload) from the store, not just the encrypted DB rows (C2).
-        $namespace = (string) $this->config->get('rag-engine.namespace', 'documents');
+        // payload) from the namespace it was indexed into, not just the encrypted
+        // DB rows (C2). Falls back to the configured default namespace.
+        $namespace = $document->indexed_namespace ?? (string) $this->config->get('rag-engine.namespace', 'documents');
         $store = $this->stores->driver();
         if ($store->namespaceExists($namespace)) {
             $store->deleteByFilter($namespace, ['document_id' => $documentId]);

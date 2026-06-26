@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Sellinnate\RagEngine;
 
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Client\Factory;
 use Sellinnate\RagEngine\Audit\AuditLogger;
 use Sellinnate\RagEngine\Chunking\ChunkingService;
@@ -147,6 +148,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
         // `scoped` is reset per request/job lifecycle.
         $this->app->scoped(TenantContext::class, fn ($app) => new TenantContext(
             (string) $app->make('config')->get('rag-engine.tenancy.default_tenant', 'default'),
+            (bool) $app->make('config')->get('rag-engine.tenancy.strict', false),
         ));
     }
 
@@ -292,6 +294,8 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(EmbeddingService::class),
             $app->make(VectorStoreManager::class),
             $app->make(EnvelopeEncrypter::class),
+            $app->make('config'),
+            $app->make(Repository::class),
         ));
 
         $this->app->singleton(Retriever::class, fn ($app) => new Retriever(

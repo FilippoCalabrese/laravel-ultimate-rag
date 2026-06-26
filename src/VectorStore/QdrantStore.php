@@ -20,10 +20,14 @@ final class QdrantStore implements VectorStore
 {
     private const METRICS = ['cosine' => 'Cosine', 'dot' => 'Dot', 'l2' => 'Euclid'];
 
+    /** @var array<string, string> namespace => Qdrant distance name */
+    private array $metricCache = [];
+
     public function __construct(
         private readonly HttpFactory $http,
         private readonly string $host,
         private readonly ?string $apiKey = null,
+        private readonly string $defaultMetric = 'cosine',
     ) {}
 
     public function createNamespace(string $namespace, int $dimensions, string $metric = 'cosine'): void
@@ -31,6 +35,8 @@ final class QdrantStore implements VectorStore
         if (! isset(self::METRICS[$metric])) {
             throw new RagException("Unsupported distance metric [{$metric}].");
         }
+
+        $this->metricCache[$namespace] = self::METRICS[$metric];
 
         if ($this->namespaceExists($namespace)) {
             return;
@@ -80,7 +86,9 @@ final class QdrantStore implements VectorStore
             $body['filter'] = $filter;
         }
 
-        if ($query->scoreThreshold !== null) {
+        // Forward the threshold only when Qdrant's "higher is better" matches our
+        // convention (cosine/dot). For Euclid we normalize client-side instead.
+        if ($query->scoreThreshold !== null && $this->metricFor($namespace) !== 'Euclid') {
             $body['score_threshold'] = $query->scoreThreshold;
         }
 
@@ -90,13 +98,18 @@ final class QdrantStore implements VectorStore
             throw new RagException("Qdrant search failed: HTTP {$response->status()}.");
         }
 
-        return array_values(array_map(static function (array $point): SearchHit {
+        // Euclid returns a distance (lower = better); normalize it to a positive
+        // higher-is-better score so the convention matches the in-memory driver.
+        $isEuclid = $this->metricFor($namespace) === 'Euclid';
+
+        return array_values(array_map(static function (array $point) use ($isEuclid): SearchHit {
             /** @var array<string, mixed> $payload */
             $payload = $point['payload'] ?? [];
+            $raw = (float) ($point['score'] ?? 0.0);
 
             return new SearchHit(
                 id: (string) $point['id'],
-                score: (float) ($point['score'] ?? 0.0),
+                score: $isEuclid ? 1.0 / (1.0 + $raw) : $raw,
                 content: (string) ($payload['content'] ?? ''),
                 metadata: $payload,
                 documentId: isset($payload['document_id']) ? (string) $payload['document_id'] : null,
@@ -190,6 +203,16 @@ final class QdrantStore implements VectorStore
      * Validate a collection name before interpolating it into a URL path,
      * blocking path/query injection (e.g. '../../collections/other').
      */
+    /**
+     * The Qdrant distance name for a namespace: the value learned when the
+     * namespace was created in this instance, else the configured default. No
+     * extra round-trip per search.
+     */
+    private function metricFor(string $namespace): string
+    {
+        return $this->metricCache[$namespace] ?? (self::METRICS[$this->defaultMetric] ?? 'Cosine');
+    }
+
     private function ns(string $namespace): string
     {
         if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $namespace) !== 1) {

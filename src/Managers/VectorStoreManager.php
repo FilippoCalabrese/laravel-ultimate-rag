@@ -43,6 +43,7 @@ final class VectorStoreManager extends DriverManager
             http: $this->app->make(HttpFactory::class),
             host: (string) ($config['host'] ?? 'http://localhost:6333'),
             apiKey: $config['api_key'] ?? null,
+            defaultMetric: (string) $this->app->make('config')->get('rag-engine.defaults.distance_metric', 'cosine'),
         );
     }
 }

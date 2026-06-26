@@ -13,6 +13,7 @@ use Sellinnate\RagEngine\Embedding\FakeEmbedder;
 use Sellinnate\RagEngine\Embedding\MistralEmbedder;
 use Sellinnate\RagEngine\Embedding\OllamaEmbedder;
 use Sellinnate\RagEngine\Embedding\RetryingEmbedder;
+use Sellinnate\RagEngine\Tenancy\TenantContext;
 
 /**
  * Resolves embedding providers (FR-EM, FR-EV-04). Real providers are wrapped
@@ -94,6 +95,7 @@ final class EmbedderManager extends DriverManager
                 $this->app->make(Cache::class),
                 ttl: (int) ($config['cache_ttl'] ?? 2592000),
                 identity: $name,
+                tenant: $this->app->make(TenantContext::class),
             );
         }
 

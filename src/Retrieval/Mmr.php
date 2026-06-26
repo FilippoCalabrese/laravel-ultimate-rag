@@ -22,6 +22,10 @@ final class Mmr
      */
     public function select(array $queryVector, array $candidates, int $topK, float $lambda = 0.5): array
     {
+        // Clamp λ to [0,1]; outside that range the trade-off inverts (λ>1 would
+        // actively prefer redundancy — the opposite of MMR's purpose).
+        $lambda = max(0.0, min(1.0, $lambda));
+
         $remaining = $candidates;
         $selected = [];
 

@@ -173,6 +173,10 @@ return [
         // namespace | schema | database
         'isolation' => env('RAG_TENANCY_ISOLATION', 'namespace'),
         'default_tenant' => env('RAG_DEFAULT_TENANT', 'default'),
+        // Strict mode: reading the tenant before one is explicitly set throws,
+        // preventing silent fallback to the shared `default` tenant. Recommended
+        // in production multi-tenant deployments (FR-MT, NFR-SE-02).
+        'strict' => env('RAG_TENANCY_STRICT', false),
         // Per-tenant quotas (FR-MT-04). null = unlimited.
         'quotas' => [
             'max_documents' => null,

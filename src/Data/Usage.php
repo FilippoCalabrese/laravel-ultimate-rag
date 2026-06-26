@@ -24,6 +24,14 @@ final class Usage implements Arrayable
 
     public function plus(Usage $other): self
     {
+        if ($other->tokens !== 0 || $other->cost !== 0.0) {
+            if ($this->currency !== $other->currency) {
+                throw new \InvalidArgumentException(
+                    "Cannot add usage in [{$other->currency}] to usage in [{$this->currency}]."
+                );
+            }
+        }
+
         return new self(
             $this->tokens + $other->tokens,
             $this->cost + $other->cost,

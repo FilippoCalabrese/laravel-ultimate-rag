@@ -256,7 +256,9 @@ final class InMemoryVectorStore implements VectorStore
         return match ($metric) {
             'cosine' => $this->cosine($a, $b),
             'dot' => $this->dot($a, $b),
-            'l2' => -$this->euclidean($a, $b), // higher = closer
+            // Normalize L2 distance to a positive higher-is-better score in (0,1]
+            // so the convention matches every other metric and the Qdrant driver.
+            'l2' => 1.0 / (1.0 + $this->euclidean($a, $b)),
             default => throw new RagException("Unsupported distance metric [{$metric}]."),
         };
     }

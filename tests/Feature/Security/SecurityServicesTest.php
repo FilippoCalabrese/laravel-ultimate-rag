@@ -86,7 +86,8 @@ it('rotates a key and re-wraps DEKs while content stays decryptable (FR-SEC-05)'
 
     expect($rewrapped)->toBeGreaterThan(0)
         ->and($wrappedAfter)->not->toBe($wrappedBefore) // re-wrapped under the new KEK
-        ->and(app(Ingestor::class)->content($document))->toBe('rotatable content here'); // still decryptable
+        // Still decryptable — read within the owning tenant's context (M1).
+        ->and(Rag::forTenant('rotate-me', fn () => app(Ingestor::class)->content($document)))->toBe('rotatable content here');
 
     Event::assertDispatched(KeyRotated::class);
 });
