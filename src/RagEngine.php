@@ -10,12 +10,17 @@ use Sellinnate\RagEngine\Contracts\Llm;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
+use Sellinnate\RagEngine\Ingestion\IngestionSource;
+use Sellinnate\RagEngine\Ingestion\Ingestor;
+use Sellinnate\RagEngine\Ingestion\SourceFactory;
 use Sellinnate\RagEngine\Managers\EmbedderManager;
 use Sellinnate\RagEngine\Managers\KmsManager;
 use Sellinnate\RagEngine\Managers\LlmManager;
 use Sellinnate\RagEngine\Managers\RerankerManager;
 use Sellinnate\RagEngine\Managers\TokenizerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
+use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Parsing\ParserManager;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
 
@@ -35,7 +40,35 @@ final class RagEngine
         private readonly LlmManager $llms,
         private readonly EnvelopeEncrypter $encrypter,
         private readonly TenantContext $tenant,
+        private readonly SourceFactory $sources,
+        private readonly Ingestor $ingestor,
+        private readonly ParserManager $parsers,
     ) {}
+
+    public function source(): SourceFactory
+    {
+        return $this->sources;
+    }
+
+    public function ingestor(): Ingestor
+    {
+        return $this->ingestor;
+    }
+
+    public function parser(): ParserManager
+    {
+        return $this->parsers;
+    }
+
+    /**
+     * Ingest a source into a {@see Document} (FR-DX-01).
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    public function ingest(IngestionSource $source, array $metadata = []): Document
+    {
+        return $this->ingestor->ingest($source, $metadata);
+    }
 
     public function embedder(?string $name = null): Embedder
     {

@@ -16,6 +16,10 @@ use Sellinnate\RagEngine\RagEngine;
  * @method static \Sellinnate\RagEngine\Contracts\Llm llm(?string $name = null)
  * @method static \Sellinnate\RagEngine\Security\EnvelopeEncrypter encrypter()
  * @method static \Sellinnate\RagEngine\Tenancy\TenantContext tenant()
+ * @method static \Sellinnate\RagEngine\Ingestion\SourceFactory source()
+ * @method static \Sellinnate\RagEngine\Ingestion\Ingestor ingestor()
+ * @method static \Sellinnate\RagEngine\Parsing\ParserManager parser()
+ * @method static \Sellinnate\RagEngine\Models\Document ingest(\Sellinnate\RagEngine\Ingestion\IngestionSource $source, array<string, mixed> $metadata = [])
  * @method static mixed forTenant(string $tenantId, callable $callback)
  *
  * @see RagEngine
