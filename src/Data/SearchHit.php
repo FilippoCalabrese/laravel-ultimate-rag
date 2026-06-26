@@ -15,6 +15,7 @@ final class SearchHit implements Arrayable
 {
     /**
      * @param  array<string, mixed>  $metadata
+     * @param  list<float>|null  $vector  The stored vector, when the backend returns it (needed by MMR).
      */
     public function __construct(
         public readonly string $id,
@@ -23,16 +24,25 @@ final class SearchHit implements Arrayable
         public readonly array $metadata = [],
         public readonly ?string $documentId = null,
         public readonly ?string $chunkId = null,
+        public readonly ?array $vector = null,
     ) {}
 
     public function withScore(float $score): self
     {
-        return new self($this->id, $score, $this->content, $this->metadata, $this->documentId, $this->chunkId);
+        return new self($this->id, $score, $this->content, $this->metadata, $this->documentId, $this->chunkId, $this->vector);
     }
 
     public function withContent(string $content): self
     {
-        return new self($this->id, $this->score, $content, $this->metadata, $this->documentId, $this->chunkId);
+        return new self($this->id, $this->score, $content, $this->metadata, $this->documentId, $this->chunkId, $this->vector);
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    public function withMetadata(array $metadata): self
+    {
+        return new self($this->id, $this->score, $this->content, [...$this->metadata, ...$metadata], $this->documentId, $this->chunkId, $this->vector);
     }
 
     /**

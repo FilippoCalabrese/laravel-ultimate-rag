@@ -23,6 +23,10 @@ use Sellinnate\RagEngine\RagEngine;
  * @method static \Sellinnate\RagEngine\Embedding\EmbeddingService embedding()
  * @method static list<\Sellinnate\RagEngine\Data\TextChunk> chunk(\Sellinnate\RagEngine\Data\ParsedDocument $document, array<string, mixed> $options = [])
  * @method static \Sellinnate\RagEngine\Data\EmbeddingResponse embed(array<int, string> $texts, ?string $provider = null)
+ * @method static \Sellinnate\RagEngine\Indexing\Indexer indexer()
+ * @method static \Sellinnate\RagEngine\Retrieval\Retriever retriever()
+ * @method static int index(\Sellinnate\RagEngine\Models\Document $document, array<int, \Sellinnate\RagEngine\Data\TextChunk> $chunks, array<string, mixed> $options = [])
+ * @method static \Sellinnate\RagEngine\Retrieval\SearchBuilder search(string $text)
  * @method static \Sellinnate\RagEngine\Models\Document ingest(\Sellinnate\RagEngine\Ingestion\IngestionSource $source, array<string, mixed> $metadata = [])
  * @method static mixed forTenant(string $tenantId, callable $callback)
  *

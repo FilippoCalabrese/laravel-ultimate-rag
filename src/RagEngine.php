@@ -15,6 +15,7 @@ use Sellinnate\RagEngine\Data\EmbeddingResponse;
 use Sellinnate\RagEngine\Data\ParsedDocument;
 use Sellinnate\RagEngine\Data\TextChunk;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Indexing\Indexer;
 use Sellinnate\RagEngine\Ingestion\IngestionSource;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
 use Sellinnate\RagEngine\Ingestion\SourceFactory;
@@ -26,6 +27,8 @@ use Sellinnate\RagEngine\Managers\TokenizerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
 use Sellinnate\RagEngine\Models\Document;
 use Sellinnate\RagEngine\Parsing\ParserManager;
+use Sellinnate\RagEngine\Retrieval\Retriever;
+use Sellinnate\RagEngine\Retrieval\SearchBuilder;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
 
@@ -50,7 +53,38 @@ final class RagEngine
         private readonly ParserManager $parsers,
         private readonly ChunkingService $chunking,
         private readonly EmbeddingService $embedding,
+        private readonly Indexer $indexer,
+        private readonly Retriever $retriever,
     ) {}
+
+    public function indexer(): Indexer
+    {
+        return $this->indexer;
+    }
+
+    /**
+     * Index a document's chunks into the vector store (FR-RT-08 plumbing).
+     *
+     * @param  list<TextChunk>  $chunks
+     * @param  array<string, mixed>  $options
+     */
+    public function index(Document $document, array $chunks, array $options = []): int
+    {
+        return $this->indexer->index($document, $chunks, $options);
+    }
+
+    /**
+     * Start a fluent retrieval query (FR-RT-08).
+     */
+    public function search(string $text): SearchBuilder
+    {
+        return new SearchBuilder($this->retriever, $text);
+    }
+
+    public function retriever(): Retriever
+    {
+        return $this->retriever;
+    }
 
     public function chunking(): ChunkingService
     {
