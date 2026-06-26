@@ -21,6 +21,8 @@ use Sellinnate\RagEngine\Contracts\Llm;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
+use Sellinnate\RagEngine\Eloquent\EmbeddableCompiler;
+use Sellinnate\RagEngine\Eloquent\ModelEmbedder;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Generation\ContextAssembler;
 use Sellinnate\RagEngine\Generation\RagGenerator;
@@ -91,6 +93,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->registerEmbedding();
         $this->registerRetrieval();
         $this->registerOrchestration();
+        $this->registerEloquent();
 
         $this->app->singleton(RagEngine::class, fn ($app) => new RagEngine(
             $app->make(EmbedderManager::class),
@@ -110,6 +113,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(Retriever::class),
             $app->make(IngestionPipeline::class),
             $app->make(RagGenerator::class),
+            $app->make(ModelEmbedder::class),
         ));
 
         $this->app->alias(RagEngine::class, 'rag-engine');
@@ -262,6 +266,21 @@ class RagEngineServiceProvider extends PackageServiceProvider
         ));
 
         $this->app->singleton(Reconciler::class, fn () => new Reconciler);
+    }
+
+    private function registerEloquent(): void
+    {
+        $this->app->singleton(EmbeddableCompiler::class, fn ($app) => new EmbeddableCompiler(
+            (int) $app->make('config')->get('rag-engine.eloquent.max_depth', 3),
+        ));
+
+        $this->app->singleton(ModelEmbedder::class, fn ($app) => new ModelEmbedder(
+            $app->make(Ingestor::class),
+            $app->make(IngestionPipeline::class),
+            $app->make(EmbeddableCompiler::class),
+            $app->make(TenantContext::class),
+            $app->make('config'),
+        ));
     }
 
     private function registerChunking(): void

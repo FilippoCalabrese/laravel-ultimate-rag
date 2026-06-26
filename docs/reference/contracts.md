@@ -37,6 +37,24 @@ interface VectorStore
 }
 ```
 
+## Embeddable
+
+Implemented by Eloquent models that should be indexed (see
+**[Embedding Eloquent models](/concepts/eloquent-models)**). The single method
+declares *what* is embedded; the `HasEmbeddings` trait supplies identity and
+sync.
+
+```php
+interface Embeddable
+{
+    public function toEmbeddable(): EmbeddableDefinition;
+}
+```
+
+`EmbeddableDefinition` (in `Sellinnate\RagEngine\Eloquent`) is a fluent builder:
+`add()` / `text()` (text parts), `include()` / `includeMany()` (related
+embeddables — recursive), `metadata()`, `documentKey()`, `options()`.
+
 ## KeyManagement
 
 ```php

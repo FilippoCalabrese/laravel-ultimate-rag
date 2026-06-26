@@ -1,0 +1,227 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sellinnate\RagEngine\Eloquent;
+
+use Illuminate\Contracts\Config\Repository as Config;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Sellinnate\RagEngine\Contracts\Embeddable;
+use Sellinnate\RagEngine\Data\SearchHit;
+use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Ingestion\IngestionSource;
+use Sellinnate\RagEngine\Ingestion\Ingestor;
+use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Pipeline\IngestionPipeline;
+use Sellinnate\RagEngine\Tenancy\TenantContext;
+
+/**
+ * Bridges Eloquent models and the RAG index (FR-DX-05).
+ *
+ * - {@see sync()} composes an {@see Embeddable} (recursively), ingests it as a
+ *   versioned document keyed by the model's stable identity, indexes it, and
+ *   purges superseded generations so a field change never leaves stale vectors.
+ * - {@see forget()} removes every trace of a model from the index (delete).
+ * - {@see resolve()} walks back from a {@see SearchHit}/{@see Document} to the
+ *   originating Eloquent model — vectors are always traceable to their source.
+ *
+ * The model's identity (`type:id`, morph-map aware) is written both to the
+ * document metadata and into every vector payload, so trace-back works straight
+ * from a retrieved vector without a second lookup.
+ */
+final class ModelEmbedder
+{
+    public function __construct(
+        private readonly Ingestor $ingestor,
+        private readonly IngestionPipeline $pipeline,
+        private readonly EmbeddableCompiler $compiler,
+        private readonly TenantContext $tenant,
+        private readonly Config $config,
+    ) {}
+
+    /**
+     * Index (or re-index) a model and its composed relations.
+     *
+     * @param  array<string, mixed>  $options
+     */
+    public function sync(Model $model, array $options = []): ?Document
+    {
+        $embeddable = $this->asEmbeddable($model);
+        $compiled = $this->compiler->compile($embeddable);
+        $key = $compiled->documentKey;
+
+        // Nothing embeddable (all fields blank): make sure no stale doc lingers.
+        if ($compiled->isEmpty()) {
+            $this->forgetByKey($key);
+
+            return null;
+        }
+
+        $identity = $this->identity($model, $key);
+        $namespace = $this->namespace($options);
+
+        $source = new IngestionSource(
+            content: $compiled->content,
+            mimeType: 'text/plain',
+            sourceType: IngestionSource::TYPE_ELOQUENT,
+            metadata: [
+                ...$compiled->metadata,
+                'document_key' => $key,
+                'embeddable_type' => $identity['type'],
+                'embeddable_id' => $identity['id'],
+                'embeddable_key' => $key,
+                'included_keys' => $compiled->includedKeys,
+                // Propagated verbatim into every vector payload (FR-RT-06), so a
+                // retrieved vector traces back to its model with no extra query.
+                'rag_vector_metadata' => [
+                    'embeddable_type' => $identity['type'],
+                    'embeddable_id' => $identity['id'],
+                    'embeddable_key' => $key,
+                ],
+            ],
+        );
+
+        $document = $this->ingestor->ingest($source);
+
+        // Re-process only when something actually changed (the ingestor dedupes
+        // unchanged content), keeping save-driven syncs cheap.
+        if ($document->wasRecentlyCreated || $document->status !== 'indexed') {
+            $this->pipeline->process($document, ['namespace' => $namespace, ...$compiled->options, ...$options]);
+        }
+
+        // Drop superseded generations (and their vectors) for this model.
+        $this->purgeOthers($key, (string) $document->id);
+
+        return $document;
+    }
+
+    /**
+     * Remove a model from the index entirely (handles deletion).
+     */
+    public function forget(Model $model): void
+    {
+        $this->forgetByKey($this->identity($model)['key']);
+    }
+
+    /**
+     * Remove a model from the index by its morph identity (for queued deletes,
+     * where the row may already be gone).
+     */
+    public function forgetByIdentity(string $type, string $id): void
+    {
+        $this->forgetByKey($type.':'.$id);
+    }
+
+    /**
+     * Trace a retrieved hit/document back to its originating Eloquent model.
+     * Returns null when the source was not a model (e.g. a URL or file) or the
+     * model no longer exists.
+     *
+     * @param  SearchHit|Document|array<string, mixed>  $subject
+     */
+    public function resolve(SearchHit|Document|array $subject): ?Model
+    {
+        $metadata = $this->metadataOf($subject);
+
+        $type = $metadata['embeddable_type'] ?? null;
+        $id = $metadata['embeddable_id'] ?? null;
+
+        // A hit may predate this metadata; fall back to its document row.
+        if (($type === null || $id === null) && $subject instanceof SearchHit && $subject->documentId !== null) {
+            $document = Document::query()->find($subject->documentId);
+
+            if ($document instanceof Document) {
+                $documentMeta = (array) $document->metadata;
+                $type = $documentMeta['embeddable_type'] ?? null;
+                $id = $documentMeta['embeddable_id'] ?? null;
+            }
+        }
+
+        if (! is_string($type) || ! is_scalar($id)) {
+            return null;
+        }
+
+        $class = Relation::getMorphedModel($type) ?? $type;
+
+        if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
+            return null;
+        }
+
+        return $class::query()->whereKey($id)->first();
+    }
+
+    private function asEmbeddable(Model $model): Embeddable
+    {
+        if (! $model instanceof Embeddable) {
+            throw new RagException(sprintf(
+                'Model [%s] must implement %s to be embedded.',
+                $model::class,
+                Embeddable::class,
+            ));
+        }
+
+        return $model;
+    }
+
+    private function purgeOthers(string $key, string $keepId): void
+    {
+        Document::query()
+            ->where('tenant_id', $this->tenant->id())
+            ->where('metadata->document_key', $key)
+            ->where('id', '!=', $keepId)
+            ->get()
+            ->each(fn (Document $document) => $this->ingestor->purge($document));
+    }
+
+    private function forgetByKey(string $key): void
+    {
+        Document::query()
+            ->where('tenant_id', $this->tenant->id())
+            ->where('metadata->document_key', $key)
+            ->get()
+            ->each(fn (Document $document) => $this->ingestor->purge($document));
+    }
+
+    /**
+     * @return array{type: string, id: string, key: string}
+     */
+    private function identity(Model $model, ?string $key = null): array
+    {
+        $type = $model->getMorphClass();
+        $id = is_scalar($model->getKey()) ? (string) $model->getKey() : '';
+
+        return ['type' => $type, 'id' => $id, 'key' => $key ?? $type.':'.$id];
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function namespace(array $options): string
+    {
+        if (isset($options['namespace']) && is_string($options['namespace'])) {
+            return $options['namespace'];
+        }
+
+        $configured = $this->config->get('rag-engine.eloquent.namespace');
+
+        if (is_string($configured) && $configured !== '') {
+            return $configured;
+        }
+
+        return (string) $this->config->get('rag-engine.namespace', 'documents');
+    }
+
+    /**
+     * @param  SearchHit|Document|array<string, mixed>  $subject
+     * @return array<string, mixed>
+     */
+    private function metadataOf(SearchHit|Document|array $subject): array
+    {
+        return match (true) {
+            $subject instanceof SearchHit => $subject->metadata,
+            $subject instanceof Document => (array) $subject->metadata,
+            default => $subject,
+        };
+    }
+}

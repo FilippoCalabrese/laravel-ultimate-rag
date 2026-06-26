@@ -126,6 +126,13 @@ rather than silently mis-aligning embeddings to chunks. OpenAI-style responses
 are also re-ordered by their `index` field for safety.
 :::
 
+## Embedding Eloquent models
+
+Beyond files and URLs, any Eloquent model can be embedded via a contract —
+recursively composing related models, staying in sync as records change, and
+tracing every vector back to its model. See
+**[Embedding Eloquent models](/concepts/eloquent-models)**.
+
 ## A custom provider
 
 Implement `Embedder` (or extend `HttpEmbedder` / `OpenAiCompatibleEmbedder`) and

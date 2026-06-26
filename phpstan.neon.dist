@@ -9,7 +9,13 @@ parameters:
         - database
     tmpDir: build/phpstan
     ignoreErrors:
-        # Searchable is a public consumer-facing trait (used in host apps, not in src).
+        # Consumer-facing traits (used in host apps' models, not within src).
         -
             identifier: trait.unused
             path: src/Concerns/Searchable.php
+        -
+            identifier: trait.unused
+            path: src/Concerns/HasEmbeddings.php
+        -
+            identifier: trait.unused
+            path: src/Concerns/TouchesEmbeddingParents.php

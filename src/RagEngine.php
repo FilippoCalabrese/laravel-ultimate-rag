@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine;
 
 use Sellinnate\RagEngine\Chunking\ChunkingService;
+use Sellinnate\RagEngine\Contracts\Embeddable;
 use Sellinnate\RagEngine\Contracts\Embedder;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
 use Sellinnate\RagEngine\Contracts\Llm;
@@ -14,6 +15,7 @@ use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Data\EmbeddingResponse;
 use Sellinnate\RagEngine\Data\ParsedDocument;
 use Sellinnate\RagEngine\Data\TextChunk;
+use Sellinnate\RagEngine\Eloquent\ModelEmbedder;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Generation\AskBuilder;
 use Sellinnate\RagEngine\Generation\RagGenerator;
@@ -60,7 +62,17 @@ final class RagEngine
         private readonly Retriever $retriever,
         private readonly IngestionPipeline $pipeline,
         private readonly RagGenerator $generator,
+        private readonly ModelEmbedder $models,
     ) {}
+
+    /**
+     * Embed Eloquent models into the index, and trace vectors back to them
+     * (FR-DX-05). Models implement {@see Embeddable}.
+     */
+    public function models(): ModelEmbedder
+    {
+        return $this->models;
+    }
 
     /**
      * Run the full ingestion pipeline (parse → preprocess → chunk → embed →

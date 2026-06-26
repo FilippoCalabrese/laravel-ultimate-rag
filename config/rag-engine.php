@@ -282,6 +282,33 @@ return [
     // retrieval and crypto-shredding to locate a tenant's vectors.
     'namespace' => env('RAG_NAMESPACE', 'documents'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Eloquent model embedding (FR-DX-05)
+    |--------------------------------------------------------------------------
+    |
+    | Models using the `HasEmbeddings` trait (implementing the `Embeddable`
+    | contract) are composed — recursively, including related embeddables — and
+    | indexed automatically. Indexed vectors carry the model's `type:id` identity
+    | so a search hit traces straight back to its model.
+    |
+    */
+    'eloquent' => [
+        // Re-index on save and remove on delete via model events.
+        'auto_sync' => env('RAG_ELOQUENT_AUTO_SYNC', true),
+
+        // Push (re)indexing onto a queue instead of running it inline on the
+        // request. Recommended in production so model writes stay fast.
+        'queue' => env('RAG_ELOQUENT_QUEUE', false),
+
+        // Max recursion depth when composing related embeddables (cycle-safe).
+        'max_depth' => env('RAG_ELOQUENT_MAX_DEPTH', 3),
+
+        // Vector-store namespace for model embeddings. Null = share the default
+        // `namespace` above, so `Rag::search()` finds models and documents alike.
+        'namespace' => env('RAG_ELOQUENT_NAMESPACE'),
+    ],
+
     'chunking' => [
         'default_strategy' => env('RAG_CHUNK_STRATEGY', 'recursive'),
         'chunk_size' => 1000,
