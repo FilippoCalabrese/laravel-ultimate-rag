@@ -85,6 +85,9 @@ final class SourceFactory
 
         // Pin the connection to a validated IP so DNS-rebinding (a second
         // resolution returning an internal address) cannot bypass the SSRF check.
+        // NOTE: pinning relies on the curl transport (the default when ext-curl is
+        // present); on a pure-stream handler the pin is ignored and rebinding
+        // protection degrades to the pre-fetch check only.
         $parts = (array) parse_url($url);
         $host = trim((string) ($parts['host'] ?? ''), '[]');
         $port = (int) ($parts['port'] ?? (($parts['scheme'] ?? 'http') === 'https' ? 443 : 80));

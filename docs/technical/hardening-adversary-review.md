@@ -68,6 +68,24 @@ input/injection/ReDoS, doc-vs-code accuracy) probed across module boundaries.
 - **324 tests** passing.
 - PHPStan **level 8 at the PHP 8.2 target**, no errors. Pint clean.
 
+## Confirmatory round (verifying the fixes held)
+
+A second adversarial pass verified each fix and probed for regressions. Two new
+medium issues introduced/remaining were then fixed:
+
+- **Audit append was not atomic.** Concurrent same-tenant logs could share a `seq`
+  and fork the chain, making `verify()` fail forever. → `log()` now runs in a
+  transaction with `lockForUpdate` on the anchor row, backed by a unique
+  `(tenant_id, seq)` index + retry on the first-log race.
+- **Stale-namespace vector survival.** Re-indexing a document into a *different*
+  namespace orphaned the old namespace's plaintext vectors (and deleted from the
+  wrong namespace). → The Indexer now drops the old vectors from the document's
+  *previous* `indexed_namespace` and sweeps it by `document_id` on a move.
+
+Low notes addressed: the re-index lock TTL was raised to cover slow embeds, and
+the SSRF IP-pin's curl-transport dependency is documented in code. Everything
+else was verified solid with no regressions.
+
 ## Honest residual risks (documented, by design)
 - The audit anchor lives in the same DB; a DDL/superuser attacker who drops the
   WORM triggers and rewrites entries + anchor consistently can defeat `verify()`.

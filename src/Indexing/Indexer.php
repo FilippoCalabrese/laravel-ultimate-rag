@@ -52,7 +52,9 @@ final class Indexer
         $store = $this->cache->getStore();
 
         if ($store instanceof LockProvider) {
-            return $store->lock('rag:index:'.$document->id, 120)
+            // TTL generous enough to cover a slow embedding call so the lock can't
+            // expire mid-operation and re-open the race it guards.
+            return $store->lock('rag:index:'.$document->id, 600)
                 ->block(15, fn (): int => $this->doIndex($document, $chunks, $options));
         }
 
@@ -66,6 +68,7 @@ final class Indexer
     private function doIndex(Document $document, array $chunks, array $options): int
     {
         $namespace = (string) ($options['namespace'] ?? $this->config->get('rag-engine.namespace', 'documents'));
+        $previousNamespace = $document->indexed_namespace;
         $tenantId = $document->tenant_id;
         $store = $this->stores->driver($options['store'] ?? null);
 
@@ -136,9 +139,16 @@ final class Indexer
             $document->forceFill(['status' => 'indexed', 'indexed_namespace' => $namespace])->save();
         });
 
-        // 4. Now the new generation is committed — drop the old vectors.
+        // 4. Now the new generation is committed — drop the old vectors from the
+        //    namespace they actually lived in (which may differ from the new one).
+        $oldNamespace = $previousNamespace ?? $namespace;
         if ($oldChunkIds !== []) {
-            $store->delete($namespace, array_values(array_map('strval', $oldChunkIds)));
+            $store->delete($oldNamespace, array_values(array_map('strval', $oldChunkIds)));
+        }
+        // If the document moved to a different namespace, sweep any stragglers in
+        // the old namespace so no plaintext vectors are orphaned (shred safety).
+        if ($previousNamespace !== null && $previousNamespace !== $namespace && $store->namespaceExists($previousNamespace)) {
+            $store->deleteByFilter($previousNamespace, ['document_id' => (string) $document->id]);
         }
 
         if ($children !== []) {

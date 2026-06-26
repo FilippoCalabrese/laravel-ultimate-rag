@@ -98,10 +98,15 @@ return new class extends Migration
             $table->string('action')->index();
             $table->string('target')->nullable();
             $table->json('context')->nullable();
-            $table->unsignedBigInteger('seq')->default(0)->index();
+            $table->unsignedBigInteger('seq')->default(0);
             $table->string('hash_prev', 64)->nullable();
             $table->string('hash', 64);
             $table->timestamp('created_at')->index();
+
+            // One entry per sequence number per tenant — a backstop that makes a
+            // concurrent same-tenant log race fail loudly instead of corrupting
+            // the hash chain (NFR-CO-03).
+            $table->unique(['tenant_id', 'seq']);
         });
 
         // Per-tenant chain anchor (high-water mark) — detects truncation /

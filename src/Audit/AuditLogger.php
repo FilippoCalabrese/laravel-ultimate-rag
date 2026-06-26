@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sellinnate\RagEngine\Audit;
 
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 use Sellinnate\RagEngine\Models\AuditAnchor;
 use Sellinnate\RagEngine\Models\AuditEntry;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
@@ -29,29 +31,44 @@ final class AuditLogger
     {
         $tenantId = $this->tenant->id();
 
-        $anchor = AuditAnchor::query()->whereKey($tenantId)->first();
-        $seq = $anchor !== null ? $anchor->seq + 1 : 1;
-        $hashPrev = $anchor?->head_hash;
+        // Serialize concurrent same-tenant appends: a transaction + row lock on
+        // the anchor prevents two entries sharing a seq / forking the chain. The
+        // unique (tenant_id, seq) index is a backstop; on the first-ever race we
+        // retry (the loser re-reads the now-existing anchor).
+        for ($attempt = 0; ; $attempt++) {
+            try {
+                return DB::transaction(function () use ($tenantId, $action, $target, $context, $actor): AuditEntry {
+                    $anchor = AuditAnchor::query()->whereKey($tenantId)->lockForUpdate()->first();
+                    $seq = $anchor !== null ? $anchor->seq + 1 : 1;
+                    $hashPrev = $anchor?->head_hash;
 
-        $entry = new AuditEntry([
-            'tenant_id' => $tenantId,
-            'actor' => $actor,
-            'action' => $action,
-            'target' => $target,
-            'context' => $context,
-            'seq' => $seq,
-            'hash_prev' => $hashPrev,
-        ]);
-        $entry->created_at = now();
-        $entry->hash = $this->hash($entry, $hashPrev);
-        $entry->save();
+                    $entry = new AuditEntry([
+                        'tenant_id' => $tenantId,
+                        'actor' => $actor,
+                        'action' => $action,
+                        'target' => $target,
+                        'context' => $context,
+                        'seq' => $seq,
+                        'hash_prev' => $hashPrev,
+                    ]);
+                    $entry->created_at = now();
+                    $entry->hash = $this->hash($entry, $hashPrev);
+                    $entry->save();
 
-        AuditAnchor::query()->updateOrCreate(
-            ['tenant_id' => $tenantId],
-            ['seq' => $seq, 'head_hash' => $entry->hash, 'updated_at' => now()],
-        );
+                    AuditAnchor::query()->updateOrCreate(
+                        ['tenant_id' => $tenantId],
+                        ['seq' => $seq, 'head_hash' => $entry->hash, 'updated_at' => now()],
+                    );
 
-        return $entry;
+                    return $entry;
+                });
+            } catch (UniqueConstraintViolationException $e) {
+                if ($attempt >= 3) {
+                    throw $e;
+                }
+                // Lost the first-log race; loop to re-read the anchor and retry.
+            }
+        }
     }
 
     /**
