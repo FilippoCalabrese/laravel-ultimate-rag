@@ -45,6 +45,8 @@
         { "title": "Architecture", "path": "/concepts/architecture", "icon": "layout" },
         { "title": "Parsing & formats", "path": "/concepts/parsing", "icon": "file-text" },
         { "title": "Preprocessing & PII", "path": "/concepts/preprocessing", "icon": "shield-check" },
+        { "title": "Chunking", "path": "/concepts/chunking", "icon": "scissors" },
+        { "title": "Embedding", "path": "/concepts/embedding", "icon": "binary" },
         { "title": "Security & BYOK", "path": "/concepts/security", "icon": "shield" },
         { "title": "Multi-tenancy", "path": "/concepts/multi-tenancy", "icon": "users" }
       ]

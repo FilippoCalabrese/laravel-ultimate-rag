@@ -5,20 +5,25 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine;
 
 use Illuminate\Http\Client\Factory;
+use Sellinnate\RagEngine\Chunking\ChunkingService;
+use Sellinnate\RagEngine\Chunking\ContextualHeaderEnricher;
 use Sellinnate\RagEngine\Contracts\Embedder;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
 use Sellinnate\RagEngine\Contracts\Llm;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
+use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Ingestion\Ingestor;
 use Sellinnate\RagEngine\Ingestion\SourceFactory;
+use Sellinnate\RagEngine\Managers\ChunkerManager;
 use Sellinnate\RagEngine\Managers\EmbedderManager;
 use Sellinnate\RagEngine\Managers\KmsManager;
 use Sellinnate\RagEngine\Managers\LlmManager;
 use Sellinnate\RagEngine\Managers\RerankerManager;
 use Sellinnate\RagEngine\Managers\TokenizerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
+use Sellinnate\RagEngine\Observability\UsageRecorder;
 use Sellinnate\RagEngine\Parsing\CsvParser;
 use Sellinnate\RagEngine\Parsing\DocxParser;
 use Sellinnate\RagEngine\Parsing\HtmlParser;
@@ -57,6 +62,8 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->registerParsing();
         $this->registerPreprocessing();
         $this->registerIngestion();
+        $this->registerChunking();
+        $this->registerEmbedding();
 
         $this->app->singleton(RagEngine::class, fn ($app) => new RagEngine(
             $app->make(EmbedderManager::class),
@@ -70,6 +77,8 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(SourceFactory::class),
             $app->make(Ingestor::class),
             $app->make(ParserManager::class),
+            $app->make(ChunkingService::class),
+            $app->make(EmbeddingService::class),
         ));
 
         $this->app->alias(RagEngine::class, 'rag-engine');
@@ -172,6 +181,30 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(TenantContext::class),
             $app->make(EnvelopeEncrypter::class),
             $app->make('config'),
+        ));
+    }
+
+    private function registerChunking(): void
+    {
+        $this->app->singleton(ChunkerManager::class, fn ($app) => new ChunkerManager($app));
+        $this->app->singleton(ContextualHeaderEnricher::class, fn () => new ContextualHeaderEnricher);
+
+        $this->app->singleton(ChunkingService::class, fn ($app) => new ChunkingService(
+            $app->make(ChunkerManager::class),
+            $app->make(ContextualHeaderEnricher::class),
+            $app->make('config'),
+        ));
+    }
+
+    private function registerEmbedding(): void
+    {
+        $this->app->singleton(UsageRecorder::class, fn ($app) => new UsageRecorder(
+            $app->make(TenantContext::class),
+        ));
+
+        $this->app->singleton(EmbeddingService::class, fn ($app) => new EmbeddingService(
+            $app->make(EmbedderManager::class),
+            $app->make(UsageRecorder::class),
         ));
     }
 

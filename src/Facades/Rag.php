@@ -19,6 +19,10 @@ use Sellinnate\RagEngine\RagEngine;
  * @method static \Sellinnate\RagEngine\Ingestion\SourceFactory source()
  * @method static \Sellinnate\RagEngine\Ingestion\Ingestor ingestor()
  * @method static \Sellinnate\RagEngine\Parsing\ParserManager parser()
+ * @method static \Sellinnate\RagEngine\Chunking\ChunkingService chunking()
+ * @method static \Sellinnate\RagEngine\Embedding\EmbeddingService embedding()
+ * @method static list<\Sellinnate\RagEngine\Data\TextChunk> chunk(\Sellinnate\RagEngine\Data\ParsedDocument $document, array<string, mixed> $options = [])
+ * @method static \Sellinnate\RagEngine\Data\EmbeddingResponse embed(array<int, string> $texts, ?string $provider = null)
  * @method static \Sellinnate\RagEngine\Models\Document ingest(\Sellinnate\RagEngine\Ingestion\IngestionSource $source, array<string, mixed> $metadata = [])
  * @method static mixed forTenant(string $tenantId, callable $callback)
  *
