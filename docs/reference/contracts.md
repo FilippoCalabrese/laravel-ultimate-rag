@@ -45,6 +45,7 @@ interface KeyManagement
     public function createKey(string $keyId): void;
     public function generateDataKey(string $keyId): GeneratedDataKey;
     public function unwrapDataKey(string $keyId, string $wrappedKey): string;
+    public function wrapDataKey(string $keyId, string $plaintext): string;   // re-wrap on rotation
     public function rotateKey(string $keyId): void;
     public function destroyKey(string $keyId): void;   // crypto-shredding
     public function keyExists(string $keyId): bool;

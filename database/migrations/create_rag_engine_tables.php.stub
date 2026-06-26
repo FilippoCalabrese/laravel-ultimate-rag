@@ -113,6 +113,25 @@ return new class extends Migration
             $table->timestamp('updated_at')->nullable();
         });
 
+        // SQL-backed vector store (pgvector/database driver). Brute-force scan
+        // suitable for small/on-prem tenants (FR-VS-02); native pgvector ANN is a
+        // future optimisation.
+        Schema::create('rag_vector_namespaces', function (Blueprint $table) {
+            $table->string('namespace')->primary();
+            $table->unsignedInteger('dimensions');
+            $table->string('metric')->default('cosine');
+        });
+
+        Schema::create('rag_vectors', function (Blueprint $table) {
+            $table->string('id');
+            $table->string('namespace')->index();
+            $table->string('tenant_id')->nullable()->index();
+            $table->longText('vector');
+            $table->json('metadata')->nullable();
+
+            $table->primary(['namespace', 'id']);
+        });
+
         Schema::create($tables['shredded_tenants'], function (Blueprint $table) {
             $table->string('tenant_id')->primary();
             $table->string('reason')->nullable();

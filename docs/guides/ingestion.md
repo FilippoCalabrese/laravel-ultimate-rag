@@ -67,8 +67,9 @@ $ingestor->purge($document);      // physical purge: deletes the only wrapped DE
 ```
 
 Purge crypto-shreds the document: because the wrapped DEK lives only in the
-document row, deleting the row makes the content permanently unrecoverable — even
-from backups, even while the tenant key is still alive.
+document row, deleting the row makes the *encrypted* content permanently
+unrecoverable (even from DB backups) while the tenant key is still alive. The
+document's plaintext vectors are also deleted from the live vector store.
 
 ::: callout warning "URL ingestion is SSRF-guarded"
 `url()` rejects non-http(s) schemes and any host that resolves to a private,

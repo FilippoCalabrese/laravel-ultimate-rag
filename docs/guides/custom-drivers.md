@@ -58,9 +58,11 @@ Then point a config connection at it:
 ```
 
 ::: callout tip "The same pattern everywhere"
-`VectorStoreManager`, `RerankerManager`, `KmsManager`, `TokenizerManager` and
-`LlmManager` all expose the identical `extend($driver, $factory)` API. Custom
-parsers and chunkers register the same way against their managers.
+`VectorStoreManager`, `RerankerManager`, `KmsManager`, `TokenizerManager`,
+`LlmManager` and `ChunkerManager` all expose the identical `extend($driver,
+$factory)` API. **Parsers** use a slightly different API — register an instance
+with `ParserManager::register(new MyParser)` (the last registered for a MIME
+type wins).
 :::
 
 ## Why this works

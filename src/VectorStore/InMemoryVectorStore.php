@@ -8,6 +8,7 @@ use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Data\RetrievalQuery;
 use Sellinnate\RagEngine\Data\SearchHit;
 use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Support\MetadataMatcher;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
 
 /**
@@ -109,7 +110,7 @@ final class InMemoryVectorStore implements VectorStore
         $scored = [];
 
         foreach ($this->store[$namespace] as $id => $entry) {
-            if (! $this->matchesFilters($entry['metadata'], $filters)) {
+            if (! MetadataMatcher::matches($entry['metadata'], $filters)) {
                 continue;
             }
 
@@ -153,7 +154,7 @@ final class InMemoryVectorStore implements VectorStore
         }
 
         foreach ($this->store[$namespace] as $id => $entry) {
-            if ($this->matchesFilters($entry['metadata'], $filter)) {
+            if (MetadataMatcher::matches($entry['metadata'], $filter)) {
                 unset($this->store[$namespace][$id]);
             }
         }
@@ -190,61 +191,6 @@ final class InMemoryVectorStore implements VectorStore
         if (! isset($this->store[$namespace])) {
             $this->store[$namespace] = [];
         }
-    }
-
-    /**
-     * @param  array<string, mixed>  $metadata
-     * @param  array<string, mixed>  $filters
-     */
-    private function matchesFilters(array $metadata, array $filters): bool
-    {
-        foreach ($filters as $key => $expected) {
-            $actual = $metadata[$key] ?? null;
-
-            if (is_array($expected)) {
-                // Operator map e.g. ['gte' => 5] or a list meaning "in".
-                if (array_is_list($expected)) {
-                    if (! in_array($actual, $expected, true)) {
-                        return false;
-                    }
-                } elseif (! $this->matchesOperators($actual, $expected)) {
-                    return false;
-                }
-            } elseif ($actual !== $expected) {
-                // Strict comparison: loose `!=` would let numeric-string tenant ids
-                // collide (e.g. '100' == '1e2', '1' == '01') and leak across tenants,
-                // and would match absent keys (null == '' / null == 0).
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param  array<string, mixed>  $operators
-     */
-    private function matchesOperators(mixed $actual, array $operators): bool
-    {
-        foreach ($operators as $op => $value) {
-            $result = match ($op) {
-                'eq' => $actual === $value,
-                'neq' => $actual !== $value,
-                'gt' => $actual > $value,
-                'gte' => $actual >= $value,
-                'lt' => $actual < $value,
-                'lte' => $actual <= $value,
-                'in' => is_array($value) && in_array($actual, $value, true),
-                'nin' => is_array($value) && ! in_array($actual, $value, true),
-                default => throw new RagException("Unsupported filter operator [{$op}]."),
-            };
-
-            if (! $result) {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     /**

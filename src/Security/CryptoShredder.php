@@ -24,7 +24,10 @@ use Sellinnate\RagEngine\Models\UsageRecord;
 
 /**
  * Crypto-shredding service (FR-SEC-04, NFR-CO-01): GDPR erasure by destroying
- * keys, making derived data irrecoverable — even from backups.
+ * keys (making encrypted DB content irrecoverable, even from DB backups) AND
+ * deleting the plaintext vectors from the live store across every namespace the
+ * tenant used. Pre-existing vector-store backups are outside the key-destruction
+ * guarantee and are the operator's retention responsibility.
  *
  * Records shredded tenants in a registry so they cannot be silently
  * re-provisioned (resolves the Cycle-0 tombstone gap).

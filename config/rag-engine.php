@@ -81,9 +81,11 @@ return [
             'api_key' => env('RAG_QDRANT_API_KEY'),
             'quantization' => env('RAG_QDRANT_QUANTIZATION'), // scalar|binary|null
         ],
+        // SQL-backed store for small/on-prem tenants (FR-VS-02). Works on any
+        // connection; brute-force scan (native pgvector ANN is a future option).
         'pgvector' => [
             'driver' => 'pgvector',
-            'connection' => env('RAG_PGVECTOR_CONNECTION', 'pgsql'),
+            'connection' => env('RAG_PGVECTOR_CONNECTION'), // null = app default
             'table' => 'rag_vectors',
         ],
     ],
@@ -106,11 +108,15 @@ return [
     'kms' => [
         'local' => [
             'driver' => 'local',
-            // Master secret used by the local dev/test KMS to wrap KEKs.
+            // 'array' (in-memory, default) or 'file' (persisted to `keystore`).
+            'store' => env('RAG_KMS_STORE', 'array'),
+            // When set with store=file, the KEK material is encrypted at rest with
+            // this master secret (AES-256-GCM); otherwise it is base64-only (dev).
             'master_key' => env('RAG_KMS_MASTER_KEY'),
             'keystore' => env('RAG_KMS_KEYSTORE', storage_path('rag-engine/kms')),
         ],
-        // aws/gcp/azure/vault drivers are registered by the KmsManager.
+        // Cloud drivers (AWS KMS, GCP KMS, Azure Key Vault, Vault) are registered
+        // by the consumer via KmsManager::extend() — they are not bundled.
     ],
 
     /*
