@@ -174,7 +174,9 @@ final class PiiRedactor implements PreprocessingStage
     {
         return [
             'email' => [
-                'pattern' => '/[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i',
+                // All quantifiers bounded (RFC-ish limits) so no start position can
+                // trigger an O(n) scan → linear time, no ReDoS; \p{L} supports IDN.
+                'pattern' => '/[\p{L}\p{N}._%+\-]{1,64}@(?:[\p{L}\p{N}\-]{1,63}\.){1,12}[\p{L}]{2,24}/u',
             ],
             'iban' => [
                 // Allow the grouped human format ("DE89 3704 ...") and lowercase.
@@ -193,13 +195,30 @@ final class PiiRedactor implements PreprocessingStage
                 'pattern' => '/\b(?:IT)?\d{11}\b/',
             ],
             'phone' => [
-                'pattern' => '/(?<![\w.])\+?\d{1,3}[ .\-]?\(?\d{2,4}\)?(?:[ .\-]?\d{2,4}){2,4}(?![\w.])/',
-                // E.164 numbers are 8–15 digits; bounding the count avoids eating
-                // longer numeric runs (order ids, non-Luhn 16-digit sequences).
+                // Lookarounds exclude '-' too, so the matcher won't grab a phone-
+                // shaped *substring* from inside a hyphenated sequence (ISBN etc.).
+                'pattern' => '/(?<![\w.\-])\+?\d{1,3}[ .\-]?\(?\d{2,4}\)?(?:[ .\-]?\d{2,4}){2,4}(?![\w.\-])/',
                 'validator' => function (string $v): bool {
                     $digits = strlen(preg_replace('/\D/', '', $v) ?? '');
 
-                    return $digits >= 8 && $digits <= 15;
+                    // E.164 numbers are 8–15 digits.
+                    if ($digits < 8 || $digits > 15) {
+                        return false;
+                    }
+
+                    // Don't destroy dates (YYYY-MM-DD) or ISBN-13 numbers.
+                    if (preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', trim($v)) === 1) {
+                        return false;
+                    }
+                    if (preg_match('/^97[89][\d\- ]+$/', trim($v)) === 1) {
+                        return false;
+                    }
+
+                    // Require phone-like structure (a leading + or separators) for
+                    // long runs, so bare 12+-digit IDs/amounts aren't over-redacted.
+                    $hasStructure = str_contains($v, '+') || preg_match('/[ .\-()]/', $v) === 1;
+
+                    return $hasStructure || $digits <= 11;
                 },
             ],
         ];

@@ -25,6 +25,12 @@ final class DocxParser implements Parser
      * is slurped whole and copied several times during extraction; a real DOCX
      * body is rarely more than a few MB.
      */
+    /** Cap on the decompressed document.xml (well below memory_limit). */
+    private const MAX_DOCUMENT_XML_BYTES = 12 * 1024 * 1024;
+
+    /** Cap on paragraph count to bound parsing work. */
+    private const MAX_PARAGRAPHS = 500_000;
+
     public function __construct(private readonly int $maxUncompressedBytes = 20 * 1024 * 1024) {}
 
     public function supports(string $mimeType): bool
@@ -97,24 +103,40 @@ final class DocxParser implements Parser
      */
     private function extract(string $xml, array $context): ParsedDocument
     {
+        // Defuse the quadratic-regex DoS: cap the XML size and split paragraphs
+        // with a LINEAR explode on the closing tag (never a backtracking
+        // `<w:p>.*?</w:p>` over potentially-unterminated tags). FR-SEC-08.
+        if (strlen($xml) > self::MAX_DOCUMENT_XML_BYTES) {
+            throw new ParsingException('DOCX document.xml exceeds the maximum allowed size.');
+        }
+
         $paragraphs = [];
         $sections = [];
 
-        // Each <w:p> is a paragraph; collect its <w:t> runs.
-        if (preg_match_all('/<w:p\b.*?<\/w:p>/s', $xml, $pMatches) !== false) {
-            foreach ($pMatches[0] as $paragraphXml) {
-                preg_match_all('/<w:t\b[^>]*>(.*?)<\/w:t>/s', $paragraphXml, $tMatches);
-                $text = html_entity_decode(strip_tags(implode('', $tMatches[1])), ENT_QUOTES | ENT_XML1, 'UTF-8');
+        $segments = explode('</w:p>', $xml);
 
-                if (trim($text) === '') {
-                    continue;
-                }
+        if (count($segments) > self::MAX_PARAGRAPHS) {
+            throw new ParsingException('DOCX has too many paragraphs (possible decompression bomb).');
+        }
 
-                $paragraphs[] = $text;
+        foreach ($segments as $paragraphXml) {
+            // <w:t> bodies are short, well-formed text runs — bounded match.
+            preg_match_all('/<w:t\b[^>]*>([^<]*)<\/w:t>/', $paragraphXml, $tMatches);
 
-                if (preg_match('/<w:pStyle[^>]*w:val="(Heading|Title)[^"]*"/i', $paragraphXml) === 1) {
-                    $sections[] = new DocumentSection(type: 'heading', content: trim($text), level: 1);
-                }
+            if ($tMatches[1] === []) {
+                continue;
+            }
+
+            $text = html_entity_decode(implode('', $tMatches[1]), ENT_QUOTES | ENT_XML1, 'UTF-8');
+
+            if (trim($text) === '') {
+                continue;
+            }
+
+            $paragraphs[] = $text;
+
+            if (preg_match('/<w:pStyle[^>]*w:val="(Heading|Title)[^"]*"/i', $paragraphXml) === 1) {
+                $sections[] = new DocumentSection(type: 'heading', content: trim($text), level: 1);
             }
         }
 

@@ -81,11 +81,22 @@ final class SourceFactory
      */
     public function url(string $url, array $metadata = []): IngestionSource
     {
-        $this->ssrf->assertSafe($url);
+        $ips = $this->ssrf->assertSafe($url);
+
+        // Pin the connection to a validated IP so DNS-rebinding (a second
+        // resolution returning an internal address) cannot bypass the SSRF check.
+        $parts = (array) parse_url($url);
+        $host = trim((string) ($parts['host'] ?? ''), '[]');
+        $port = (int) ($parts['port'] ?? (($parts['scheme'] ?? 'http') === 'https' ? 443 : 80));
 
         // Redirects are not followed: a permitted host could 302 into the
         // internal network, defeating the SSRF check (FR-IN-03, NFR-SE).
-        $response = $this->http->withOptions(['allow_redirects' => false])->get($url);
+        $response = $this->http
+            ->withOptions([
+                'allow_redirects' => false,
+                'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$ips[0]}"]],
+            ])
+            ->get($url);
 
         if (! $response->successful()) {
             throw new RagException("Failed to fetch URL [{$url}]: HTTP {$response->status()}.");
