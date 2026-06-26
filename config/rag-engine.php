@@ -174,6 +174,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Preprocessing pipeline (FR-PP-04) — ordered, activatable stages
+    |--------------------------------------------------------------------------
+    | PII redaction is ON by default (FR-PP-03). Order matters.
+    */
+    'preprocessing' => [
+        'stages' => [
+            'text-cleaner',
+            'language-detector',
+            'pii-redactor',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Retrieval defaults (FR-RT)
     |--------------------------------------------------------------------------
     */

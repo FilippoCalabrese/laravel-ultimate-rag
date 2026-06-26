@@ -1,0 +1,222 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Sellinnate\RagEngine\Ingestion;
+
+use Illuminate\Contracts\Config\Repository as Config;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Sellinnate\RagEngine\Data\EncryptedPayload;
+use Sellinnate\RagEngine\Events\DataShredded;
+use Sellinnate\RagEngine\Events\DocumentIngested;
+use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Models\Document;
+use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
+use Sellinnate\RagEngine\Tenancy\TenantContext;
+
+/**
+ * Persists an {@see IngestionSource} as a {@see Document} with deduplication
+ * (FR-IN-06), provenance (FR-IN-07), versioning (FR-IN-08), arbitrary metadata
+ * (FR-IN-09), envelope encryption (FR-SEC-01) and soft-delete/purge (FR-IN-10).
+ */
+final class Ingestor
+{
+    public function __construct(
+        private readonly TenantContext $tenant,
+        private readonly EnvelopeEncrypter $encrypter,
+        private readonly Config $config,
+    ) {}
+
+    /**
+     * @param  array<string, mixed>  $metadata  Arbitrary metadata propagated to the document.
+     */
+    public function ingest(IngestionSource $source, array $metadata = []): Document
+    {
+        $this->assertWithinSizeLimit($source);
+
+        $tenantId = $this->tenant->id();
+        $hash = $source->contentHash();
+
+        // Deduplication / idempotent re-ingestion (FR-IN-06).
+        $duplicate = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('content_hash', $hash)
+            ->whereNull('soft_deleted_at')
+            ->first();
+
+        if ($duplicate instanceof Document) {
+            return $duplicate;
+        }
+
+        try {
+            return DB::transaction(function () use ($source, $metadata, $tenantId, $hash): Document {
+                $version = $this->resolveVersion($source, $tenantId, $hash);
+
+                [$ref, $dekId] = $this->encryptContent($source->content, $tenantId);
+
+                $document = Document::create([
+                    'tenant_id' => $tenantId,
+                    'source_type' => $source->sourceType,
+                    'content_hash' => $hash,
+                    'mime' => $source->mimeType,
+                    'size' => $source->size(),
+                    'metadata' => $this->buildMetadata($source, $metadata),
+                    'version' => $version,
+                    'status' => 'pending',
+                    'encrypted_content_ref' => $ref,
+                    'dek_id' => $dekId,
+                ]);
+
+                event(new DocumentIngested((string) $document->id, $tenantId));
+
+                return $document;
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // Lost a race with a concurrent ingest of identical content (TOCTOU
+            // between the dedup check and the insert). Return the winner.
+            $winner = Document::query()
+                ->where('tenant_id', $tenantId)
+                ->where('content_hash', $hash)
+                ->whereNull('soft_deleted_at')
+                ->orderByDesc('version')
+                ->first();
+
+            if ($winner instanceof Document) {
+                return $winner;
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Recover the original content of a document (decrypting if needed).
+     */
+    public function content(Document $document): string
+    {
+        $ref = $document->encrypted_content_ref;
+
+        if ($ref === null) {
+            return '';
+        }
+
+        if ($document->dek_id === null) {
+            // Stored as plaintext (encryption disabled).
+            return (string) base64_decode($ref, true);
+        }
+
+        return $this->encrypter->decrypt(EncryptedPayload::fromArray((array) json_decode($ref, true)));
+    }
+
+    /**
+     * Soft-delete a document, keeping it recoverable until purge (FR-IN-10).
+     */
+    public function softDelete(Document $document): void
+    {
+        $document->forceFill([
+            'soft_deleted_at' => now(),
+            'status' => 'deleted',
+        ])->save();
+    }
+
+    /**
+     * Physically purge a document. Deleting the row destroys the only copy of
+     * the wrapped DEK, crypto-shredding the content at document granularity
+     * (FR-IN-10, FR-SEC-04).
+     */
+    public function purge(Document $document): void
+    {
+        $tenantId = $document->tenant_id;
+        $documentId = (string) $document->id;
+        $wasEncrypted = $document->dek_id !== null;
+
+        DB::transaction(function () use ($document): void {
+            $document->chunks()->delete();
+            $document->delete();
+        });
+
+        if ($wasEncrypted) {
+            // The shredded key is the per-document wrapped DEK that lived in the
+            // now-deleted row — identify it by the document, not the shared KEK.
+            event(new DataShredded($documentId, $tenantId, 'document'));
+        }
+    }
+
+    private function resolveVersion(IngestionSource $source, string $tenantId, string $hash): int
+    {
+        $version = 1;
+        $key = $source->documentKey();
+
+        if ($key !== null) {
+            $prior = Document::query()
+                ->where('tenant_id', $tenantId)
+                ->where('metadata->document_key', $key)
+                ->whereNull('soft_deleted_at')
+                ->orderByDesc('version')
+                ->first();
+
+            if ($prior instanceof Document) {
+                // Supersede the prior version atomically (FR-AF-05).
+                $prior->forceFill(['status' => 'superseded', 'soft_deleted_at' => now()])->save();
+                $version = $prior->version + 1;
+            }
+        }
+
+        // Keep (tenant_id, content_hash, version) unique even when an earlier
+        // generation of the same content was soft-deleted, so re-ingesting after
+        // a soft-delete produces a fresh, higher version.
+        $maxForHash = Document::query()
+            ->where('tenant_id', $tenantId)
+            ->where('content_hash', $hash)
+            ->max('version');
+
+        if ($maxForHash !== null) {
+            $version = max($version, (int) $maxForHash + 1);
+        }
+
+        return $version;
+    }
+
+    /**
+     * @return array{0: string, 1: string|null} [ref, dekId]
+     */
+    private function encryptContent(string $content, string $tenantId): array
+    {
+        if (! $this->config->get('rag-engine.security.encryption_enabled', true)) {
+            return [base64_encode($content), null];
+        }
+
+        $payload = $this->encrypter->encrypt($content, $tenantId);
+
+        return [json_encode($payload->toArray(), JSON_THROW_ON_ERROR), $tenantId];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     * @return array<string, mixed>
+     */
+    private function buildMetadata(IngestionSource $source, array $metadata): array
+    {
+        return [
+            ...$source->metadata,
+            ...$metadata,
+            'provenance' => [
+                'source_type' => $source->sourceType,
+                'checksum' => $source->contentHash(),
+                'mime' => $source->mimeType,
+                'size' => $source->size(),
+                'ingested_at' => now()->toIso8601String(),
+            ],
+        ];
+    }
+
+    private function assertWithinSizeLimit(IngestionSource $source): void
+    {
+        $max = (int) $this->config->get('rag-engine.ingestion.max_upload_bytes', 50 * 1024 * 1024);
+
+        if ($max > 0 && $source->size() > $max) {
+            throw new RagException("Source exceeds the maximum size of {$max} bytes.");
+        }
+    }
+}

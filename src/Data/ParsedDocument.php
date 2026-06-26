@@ -53,6 +53,24 @@ final class ParsedDocument implements Arrayable
     }
 
     /**
+     * @param  list<DocumentSection>  $sections
+     */
+    public function withSections(array $sections): self
+    {
+        return new self($this->text, $this->mimeType, $sections, $this->metadata, $this->language);
+    }
+
+    /**
+     * Replace (not merge) the metadata array.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    public function replaceMetadata(array $metadata): self
+    {
+        return new self($this->text, $this->mimeType, $this->sections, $metadata, $this->language);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array

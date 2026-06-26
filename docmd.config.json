@@ -43,6 +43,8 @@
       "icon": "book-open",
       "children": [
         { "title": "Architecture", "path": "/concepts/architecture", "icon": "layout" },
+        { "title": "Parsing & formats", "path": "/concepts/parsing", "icon": "file-text" },
+        { "title": "Preprocessing & PII", "path": "/concepts/preprocessing", "icon": "shield-check" },
         { "title": "Security & BYOK", "path": "/concepts/security", "icon": "shield" },
         { "title": "Multi-tenancy", "path": "/concepts/multi-tenancy", "icon": "users" }
       ]
@@ -51,6 +53,7 @@
       "title": "Guides",
       "icon": "compass",
       "children": [
+        { "title": "Ingesting content", "path": "/guides/ingestion", "icon": "upload" },
         { "title": "Custom drivers", "path": "/guides/custom-drivers", "icon": "puzzle" }
       ]
     },
