@@ -1,17 +1,22 @@
 {
-    "name": ":vendor_slug/:package_slug",
-    "description": ":package_description",
+    "name": "sellinnate/rag-engine",
+    "description": "Enterprise Retrieval-Augmented Generation engine for Laravel: ingestion, parsing, chunking, embedding, vector store, retrieval, reranking, BYOK security and multi-tenancy.",
     "keywords": [
-        ":vendor_name",
+        "sellinnate",
         "laravel",
-        ":package_slug"
+        "rag",
+        "retrieval-augmented-generation",
+        "embeddings",
+        "vector-search",
+        "qdrant",
+        "pgvector"
     ],
-    "homepage": "https://github.com/:vendor_slug/:package_slug",
+    "homepage": "https://github.com/sellinnate/rag-engine",
     "license": "MIT",
     "authors": [
         {
-            "name": ":author_name",
-            "email": "author@domain.com",
+            "name": "Filippo Calabrese",
+            "email": "filippo@selli.io",
             "role": "Developer"
         }
     ],
@@ -35,13 +40,13 @@
     },
     "autoload": {
         "psr-4": {
-            "VendorName\\Skeleton\\": "src/",
-            "VendorName\\Skeleton\\Database\\Factories\\": "database/factories/"
+            "Sellinnate\\RagEngine\\": "src/",
+            "Sellinnate\\RagEngine\\Database\\Factories\\": "database/factories/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "VendorName\\Skeleton\\Tests\\": "tests/",
+            "Sellinnate\\RagEngine\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/"
         }
     },
@@ -50,7 +55,7 @@
         "prepare": "@php vendor/bin/testbench package:discover --ansi",
         "analyse": "vendor/bin/phpstan analyse",
         "test": "vendor/bin/pest",
-        "test-coverage": "vendor/bin/pest --coverage",
+        "test-coverage": "vendor/bin/pest --coverage --min=90",
         "format": "vendor/bin/pint"
     },
     "config": {
@@ -63,10 +68,10 @@
     "extra": {
         "laravel": {
             "providers": [
-                "VendorName\\Skeleton\\SkeletonServiceProvider"
+                "Sellinnate\\RagEngine\\RagEngineServiceProvider"
             ],
             "aliases": {
-                "Skeleton": "VendorName\\Skeleton\\Facades\\Skeleton"
+                "Rag": "Sellinnate\\RagEngine\\Facades\\Rag"
             }
         }
     },

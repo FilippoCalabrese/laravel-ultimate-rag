@@ -1,0 +1,70 @@
+{
+  "title": "RAG Engine for Laravel",
+  "url": "https://sellinnate.github.io/rag-engine",
+  "src": "docs",
+  "out": "site",
+  "engine": "js",
+  "layout": {
+    "spa": true,
+    "header": { "enabled": true },
+    "sidebar": { "collapsible": true, "defaultCollapsed": false },
+    "optionsMenu": {
+      "position": "sidebar-top",
+      "components": { "search": true, "themeSwitch": true }
+    },
+    "footer": {
+      "style": "minimal",
+      "content": "© 2026 Sellinnate — RAG Engine. MIT licensed.",
+      "branding": true
+    }
+  },
+  "theme": {
+    "name": "default",
+    "appearance": "system",
+    "codeHighlight": true
+  },
+  "minify": true,
+  "autoTitleFromH1": true,
+  "copyCode": true,
+  "pageNavigation": true,
+  "navigation": [
+    { "title": "Introduction", "path": "/", "icon": "home" },
+    {
+      "title": "Getting Started",
+      "icon": "rocket",
+      "collapsible": false,
+      "children": [
+        { "title": "Installation", "path": "/getting-started/installation", "icon": "download" },
+        { "title": "Configuration", "path": "/getting-started/configuration", "icon": "cog" }
+      ]
+    },
+    {
+      "title": "Concepts",
+      "icon": "book-open",
+      "children": [
+        { "title": "Architecture", "path": "/concepts/architecture", "icon": "layout" },
+        { "title": "Security & BYOK", "path": "/concepts/security", "icon": "shield" },
+        { "title": "Multi-tenancy", "path": "/concepts/multi-tenancy", "icon": "users" }
+      ]
+    },
+    {
+      "title": "Guides",
+      "icon": "compass",
+      "children": [
+        { "title": "Custom drivers", "path": "/guides/custom-drivers", "icon": "puzzle" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "icon": "list",
+      "children": [
+        { "title": "Contracts", "path": "/reference/contracts", "icon": "file-text" }
+      ]
+    },
+    { "title": "GitHub", "path": "https://github.com/sellinnate/rag-engine", "icon": "github", "external": true }
+  ],
+  "plugins": {
+    "git": { "commitHistory": true, "maxCommits": 5 },
+    "seo": { "defaultDescription": "Enterprise Retrieval-Augmented Generation engine for Laravel." }
+  }
+}

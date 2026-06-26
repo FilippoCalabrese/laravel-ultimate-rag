@@ -1,93 +1,69 @@
-# :package_description
+# RAG Engine for Laravel
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/:vendor_slug/:package_slug.svg?style=flat-square)](https://packagist.org/packages/:vendor_slug/:package_slug)
-[![GitHub Tests Action Status](https://github.com/spatie/package-skeleton-laravel/actions/workflows/run-tests.yml/badge.svg)](https://github.com/:vendor_slug/:package_slug/actions?query=workflow%3Arun-tests+branch%3Amain)
-[![GitHub Code Style Action Status](https://github.com/spatie/package-skeleton-laravel/actions/workflows/fix-php-code-style-issues.yml/badge.svg)](https://github.com/:vendor_slug/:package_slug/actions?query=workflow%3A"Fix+PHP+code+style+issues"+branch%3Amain)
-[![Total Downloads](https://img.shields.io/packagist/dt/:vendor_slug/:package_slug.svg?style=flat-square)](https://packagist.org/packages/:vendor_slug/:package_slug)
-<!--delete-->
----
-This repo can be used to scaffold a Laravel package. Follow these steps to get started:
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)]()
+[![PHPStan](https://img.shields.io/badge/PHPStan-level%208-blue)]()
 
-1. Press the "Use this template" button at the top of this repo to create a new repo with the contents of this skeleton.
-2. Run "php ./configure.php" to run a script that will replace all placeholders throughout all the files.
-3. Have fun creating your package.
-4. If you need help creating a package, consider picking up our <a href="https://laravelpackage.training">Laravel Package Training</a> video course.
----
-<!--/delete-->
-This is where your description should go. Limit it to a paragraph or two. Consider adding a small example.
+Enterprise **Retrieval-Augmented Generation** engine for Laravel: ingestion,
+parsing, chunking, embedding, vector search, reranking, BYOK security and
+multi-tenancy — all behind stable contracts.
 
-## Support us
+> Infrastructure, not a feature. The engine owns the whole pipeline from
+> *ingestion → retrieval*. Generation is an optional, decoupled layer.
 
-[<img src="https://github-ads.s3.eu-central-1.amazonaws.com/:package_name.jpg?t=1" width="419px" />](https://spatie.be/github-ad-click/:package_name)
+## Principles
 
-We invest a lot of resources into creating [best in class open source packages](https://spatie.be/open-source). You can support us by [buying one of our paid products](https://spatie.be/open-source/support-us).
+- **Domain-agnostic** generic primitives (documents, chunks, queries, results).
+- **Contract-first** — every replaceable component sits behind an interface.
+- **Async-first** ingestion; synchronous, low-latency retrieval.
+- **Multi-tenant & secure by design** — per-tenant isolation and BYOK envelope encryption.
+- **EU-resident by default** for data and embeddings.
 
-We highly appreciate you sending us a postcard from your hometown, mentioning which of our package(s) you are using. You'll find our address on [our contact page](https://spatie.be/about-us). We publish all received postcards on [our virtual postcard wall](https://spatie.be/open-source/postcards).
-
-## Installation
-
-You can install the package via composer:
+## Install
 
 ```bash
-composer require :vendor_slug/:package_slug
-```
-
-You can publish and run the migrations with:
-
-```bash
-php artisan vendor:publish --tag=":package_slug-migrations"
+composer require sellinnate/rag-engine
+php artisan vendor:publish --tag="rag-engine-config"
+php artisan vendor:publish --tag="rag-engine-migrations"
 php artisan migrate
 ```
 
-You can publish the config file with:
-
-```bash
-php artisan vendor:publish --tag=":package_slug-config"
-```
-
-This is the contents of the published config file:
+## Quick start
 
 ```php
-return [
-];
+use Sellinnate\RagEngine\Facades\Rag;
+
+// BYOK envelope encryption
+$payload = Rag::encrypter()->encrypt('confidential text', 'tenant-42');
+$plain   = Rag::encrypter()->decrypt($payload);
+
+// Crypto-shredding (GDPR right to erasure)
+Rag::kms()->destroyKey('tenant-42');
+
+// Tenant-scoped work
+Rag::forTenant('tenant-7', fn () => /* ... */);
 ```
 
-Optionally, you can publish the views using
+## Documentation
+
+Full docs are built with [docmd](https://docmd.io) from `docs/` into `site/`:
 
 ```bash
-php artisan vendor:publish --tag=":package_slug-views"
+npx docmd dev    # local preview
+npx docmd build  # static site into site/
 ```
 
-## Usage
-
-```php
-$:variable = new VendorName\Skeleton();
-echo $:variable->echoPhrase('Hello, VendorName!');
-```
-
-## Testing
+## Development
 
 ```bash
-composer test
+composer test                                    # run the suite
+vendor/bin/phpstan analyse                        # static analysis (level 8)
+vendor/bin/pint                                   # code style
+
+# Coverage (requires a coverage driver, e.g. Xdebug/PCOV):
+XDEBUG_MODE=coverage vendor/bin/pest --coverage --min=90
 ```
-
-## Changelog
-
-Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed recently.
-
-## Contributing
-
-Please see [CONTRIBUTING](CONTRIBUTING.md) for details.
-
-## Security Vulnerabilities
-
-Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
-
-## Credits
-
-- [:author_name](https://github.com/:author_username)
-- [All Contributors](../../contributors)
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+MIT. See [LICENSE.md](LICENSE.md).
