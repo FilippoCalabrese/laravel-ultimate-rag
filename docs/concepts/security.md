@@ -8,6 +8,15 @@ description: "Envelope encryption, KMS abstraction and crypto-shredding."
 Encryption and key management are first-class, not bolted on. The model is
 **Bring-Your-Own-Key (BYOK) envelope encryption** with **crypto-shredding**.
 
+::: callout info "In plain words"
+Your ingested content is encrypted at rest, and *you* control the keys (that's
+BYOK). To honour a "delete all my data" request, you don't have to hunt down
+every copy and backup — you destroy the key, and the data becomes permanently
+unreadable everywhere at once (that's *crypto-shredding*). The two terms below,
+**DEK** and **KEK**, are just "the key that locks the data" and "the key that
+locks the keys".
+:::
+
 ## Envelope encryption
 
 Each piece of sensitive content (source body, chunk text, sensitive metadata) is
@@ -77,6 +86,22 @@ backup retention policy.
 A KEK can be rotated without re-ingesting data. The local KMS keeps every KEK
 version: new DEKs are wrapped with the newest version, while previously wrapped
 DEKs continue to unwrap — so rotation is non-destructive.
+
+## Best practices
+
+- **Keep encryption enabled** (`RAG_ENCRYPTION_ENABLED=true`) for any sensitive
+  corpus — it's the basis of crypto-shredding.
+- **Use a real KMS in production.** The `local` driver is for dev/test; wire a
+  cloud KMS (AWS/GCP/Azure/Vault) via the `KeyManagement` contract for production
+  key custody.
+- **Erase via the key, not by hand.** To honour erasure, `destroyKey()` /
+  `rag:purge` the tenant — don't try to scrub individual rows.
+- **Encrypt your vector store at rest too.** Vectors and their chunk text are
+  *not* BYOK-encrypted (see the boundary note above); rely on the store's own
+  disk/volume encryption.
+- **Define a backup-retention policy.** Crypto-shredding covers live data and the
+  live vector store; pre-existing *backups* are governed by your retention policy.
+- **Rotate keys periodically** with `rag:rotate-keys` — it's non-destructive.
 
 ## What is verified by tests
 

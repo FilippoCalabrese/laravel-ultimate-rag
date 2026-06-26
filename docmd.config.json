@@ -34,7 +34,9 @@
       "icon": "rocket",
       "collapsible": false,
       "children": [
+        { "title": "What is RAG? (start here)", "path": "/getting-started/what-is-rag", "icon": "lightbulb" },
         { "title": "Installation", "path": "/getting-started/installation", "icon": "download" },
+        { "title": "Quickstart", "path": "/getting-started/quickstart", "icon": "zap" },
         { "title": "Configuration", "path": "/getting-started/configuration", "icon": "cog" }
       ]
     },

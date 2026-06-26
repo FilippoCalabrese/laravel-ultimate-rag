@@ -10,6 +10,14 @@ is embedded through one contract; the engine composes it (recursively, including
 related models), keeps the index in sync as the model changes, and lets you walk
 back from any retrieved vector to the originating model.
 
+::: callout info "In plain words"
+If the content you want to search already lives in your database (blog posts,
+products, support tickets…), you don't need to export it to files first. You add
+a trait and one method to the model, and it becomes searchable — and *stays*
+searchable automatically as rows are created, edited and deleted. New to the
+core ideas? Read **[What is RAG?](/getting-started/what-is-rag)** first.
+:::
+
 ```php
 use Sellinnate\RagEngine\Concerns\HasEmbeddings;
 use Sellinnate\RagEngine\Contracts\Embeddable;
@@ -154,7 +162,7 @@ By default model embeddings share the global `namespace`, so `Rag::search()`
 finds models and documents together. Point `RAG_ELOQUENT_NAMESPACE` at a separate
 collection to keep them apart.
 
-## Every chunk is traceable
+## Every chunk is traceable {#every-chunk-is-traceable}
 
 This isn't limited to models. **Every** indexed vector — from a file, a URL or a
 model — carries provenance in its payload so a hit always traces back to its
