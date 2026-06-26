@@ -1,0 +1,157 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $tables = config('rag-engine.tables');
+
+        Schema::create($tables['documents'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('tenant_id')->index();
+            $table->string('source_type');
+            $table->string('content_hash', 64)->index();
+            $table->string('mime')->nullable();
+            $table->unsignedBigInteger('size')->nullable();
+            $table->json('metadata')->nullable();
+            $table->unsignedInteger('version')->default(1);
+            $table->string('status')->default('pending')->index();
+            $table->text('encrypted_content_ref')->nullable();
+            $table->string('dek_id')->nullable();
+            $table->string('language')->nullable();
+            $table->timestamp('soft_deleted_at')->nullable()->index();
+            $table->timestamps();
+
+            $table->unique(['tenant_id', 'content_hash', 'version']);
+        });
+
+        Schema::create($tables['chunks'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('document_id')->index();
+            $table->string('tenant_id')->index();
+            $table->longText('encrypted_content')->nullable();
+            $table->longText('content')->nullable();
+            $table->unsignedInteger('position');
+            $table->unsignedInteger('offset')->default(0);
+            $table->json('metadata')->nullable();
+            $table->uuid('parent_chunk_id')->nullable()->index();
+            $table->unsignedInteger('token_count')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create($tables['embeddings'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('chunk_id')->index();
+            $table->string('tenant_id')->index();
+            $table->string('model');
+            $table->unsignedInteger('dimensions');
+            $table->string('provider');
+            $table->string('vector_ref')->nullable();
+            $table->decimal('cost', 12, 6)->default(0);
+            $table->timestamps();
+        });
+
+        Schema::create($tables['data_keys'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('tenant_id')->index();
+            $table->text('wrapped_dek');
+            $table->string('kek_ref');
+            $table->timestamp('rotated_at')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create($tables['ingestion_runs'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('tenant_id')->index();
+            $table->string('status')->default('pending')->index();
+            $table->unsignedInteger('total')->default(0);
+            $table->unsignedInteger('processed')->default(0);
+            $table->unsignedInteger('failed')->default(0);
+            $table->json('errors')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create($tables['usage_records'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('tenant_id')->index();
+            $table->string('operation');
+            $table->unsignedBigInteger('tokens')->default(0);
+            $table->decimal('cost', 12, 6)->default(0);
+            $table->string('currency', 3)->default('EUR');
+            $table->string('period')->index();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create($tables['audit_entries'], function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('tenant_id')->index();
+            $table->string('actor')->nullable();
+            $table->string('action')->index();
+            $table->string('target')->nullable();
+            $table->json('context')->nullable();
+            $table->string('hash_prev', 64)->nullable();
+            $table->string('hash', 64);
+            $table->timestamp('created_at')->index();
+        });
+
+        // Enforce audit immutability at the database layer (NFR-CO-03). Model-level
+        // guards alone are bypassable via mass-update, *Quietly() and DB::table().
+        // WORM triggers refuse every UPDATE/DELETE regardless of the access path.
+        $this->guardAuditTable($tables['audit_entries']);
+    }
+
+    public function down(): void
+    {
+        $tables = config('rag-engine.tables');
+
+        $this->unguardAuditTable($tables['audit_entries']);
+
+        foreach (array_reverse($tables) as $table) {
+            Schema::dropIfExists($table);
+        }
+    }
+
+    private function guardAuditTable(string $table): void
+    {
+        $driver = Schema::getConnection()->getDriverName();
+
+        match ($driver) {
+            'sqlite' => array_map(DB::unprepared(...), [
+                "CREATE TRIGGER {$table}_no_update BEFORE UPDATE ON {$table} BEGIN SELECT RAISE(ABORT, 'Audit entries are immutable.'); END;",
+                "CREATE TRIGGER {$table}_no_delete BEFORE DELETE ON {$table} BEGIN SELECT RAISE(ABORT, 'Audit entries are immutable.'); END;",
+            ]),
+            'mysql', 'mariadb' => array_map(DB::unprepared(...), [
+                "CREATE TRIGGER {$table}_no_update BEFORE UPDATE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit entries are immutable.';",
+                "CREATE TRIGGER {$table}_no_delete BEFORE DELETE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit entries are immutable.';",
+            ]),
+            'pgsql' => array_map(DB::unprepared(...), [
+                "CREATE OR REPLACE FUNCTION {$table}_immutable() RETURNS trigger AS \$\$ BEGIN RAISE EXCEPTION 'Audit entries are immutable.'; END; \$\$ LANGUAGE plpgsql;",
+                "CREATE TRIGGER {$table}_no_update BEFORE UPDATE ON {$table} FOR EACH ROW EXECUTE FUNCTION {$table}_immutable();",
+                "CREATE TRIGGER {$table}_no_delete BEFORE DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION {$table}_immutable();",
+            ]),
+            default => null,
+        };
+    }
+
+    private function unguardAuditTable(string $table): void
+    {
+        $driver = Schema::getConnection()->getDriverName();
+
+        if (in_array($driver, ['sqlite', 'mysql', 'mariadb', 'pgsql'], true)) {
+            DB::unprepared("DROP TRIGGER IF EXISTS {$table}_no_update".($driver === 'pgsql' ? " ON {$table}" : '').';');
+            DB::unprepared("DROP TRIGGER IF EXISTS {$table}_no_delete".($driver === 'pgsql' ? " ON {$table}" : '').';');
+        }
+
+        if ($driver === 'pgsql') {
+            DB::unprepared("DROP FUNCTION IF EXISTS {$table}_immutable();");
+        }
+    }
+};
