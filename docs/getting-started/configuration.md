@@ -38,6 +38,14 @@ Each subsystem then has a block of **named connections**, every one declaring a
 This means you can have several connections sharing one driver type, each tuned
 differently — and select between them at runtime by name.
 
+::: callout tip "Where do API keys go?"
+Never in this file. Each provider's `api_key` reads from an `env()` variable —
+set it in your `.env`. A copy-ready list of every variable ships as
+**`.env.example`** at the package root, and the
+**[Embedding & providers](/concepts/embedding#credentials)** page walks through
+each provider. The config stays committed and `config:cache`-safe.
+:::
+
 ## Security
 
 ```php

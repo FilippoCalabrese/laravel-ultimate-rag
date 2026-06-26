@@ -42,14 +42,24 @@ return [
     |--------------------------------------------------------------------------
     | Embedding providers (FR-EM)
     |--------------------------------------------------------------------------
+    |
+    | API credentials go in the `api_key` of each provider block below — set the
+    | corresponding env var in your `.env` (NEVER hard-code keys here; this file
+    | is `config:cache`-safe and committed). Provider-specific extras (deployment,
+    | input_type, task, organization…) go under that provider's `options` array.
     */
     'embedders' => [
+
+        // Deterministic, zero-network — tests/dev. No key needed.
         'fake' => [
             'driver' => 'fake',
             'dimensions' => 8,
             'model' => 'fake-embed-v1',
         ],
-        'mistral' => [
+
+        // --- EU-resident / self-hosted (default posture) ---
+
+        'mistral' => [ // EU cloud
             'driver' => 'mistral',
             'model' => env('RAG_MISTRAL_MODEL', 'mistral-embed'),
             'dimensions' => 1024,
@@ -57,12 +67,78 @@ return [
             'base_url' => env('RAG_MISTRAL_BASE_URL', 'https://api.mistral.ai/v1'),
             'eu_resident' => true,
         ],
-        'ollama' => [
+
+        'jina' => [ // EU cloud (jina-embeddings-v3: Matryoshka dimensions)
+            'driver' => 'jina',
+            'model' => env('RAG_JINA_MODEL', 'jina-embeddings-v3'),
+            'dimensions' => (int) env('RAG_JINA_DIMENSIONS', 1024),
+            'api_key' => env('RAG_JINA_API_KEY'),
+            'eu_resident' => true,
+            'options' => ['task' => env('RAG_JINA_TASK')], // e.g. retrieval.passage
+        ],
+
+        'azure-openai' => [ // EU-resident when the resource is in an EU region
+            'driver' => 'azure-openai',
+            'model' => env('RAG_AZURE_MODEL', 'text-embedding-3-small'),
+            'dimensions' => (int) env('RAG_AZURE_DIMENSIONS', 1536),
+            'api_key' => env('RAG_AZURE_API_KEY'),
+            'base_url' => env('RAG_AZURE_ENDPOINT'), // https://<res>.openai.azure.com
+            'eu_resident' => true,
+            'options' => [
+                'deployment' => env('RAG_AZURE_DEPLOYMENT'),
+                'api_version' => env('RAG_AZURE_API_VERSION', '2024-02-01'),
+            ],
+        ],
+
+        'ollama' => [ // self-hosted (BGE/E5/Nomic) — maximum sovereignty
             'driver' => 'ollama',
             'model' => env('RAG_OLLAMA_MODEL', 'nomic-embed-text'),
-            'dimensions' => 768,
+            'dimensions' => (int) env('RAG_OLLAMA_DIMENSIONS', 768),
             'base_url' => env('RAG_OLLAMA_BASE_URL', 'http://localhost:11434'),
             'eu_resident' => true,
+        ],
+
+        'huggingface' => [ // open models via the Inference API (or self-host)
+            'driver' => 'huggingface',
+            'model' => env('RAG_HF_MODEL', 'BAAI/bge-small-en-v1.5'),
+            'dimensions' => (int) env('RAG_HF_DIMENSIONS', 384),
+            'api_key' => env('RAG_HF_API_KEY'),
+            'base_url' => env('RAG_HF_BASE_URL', 'https://api-inference.huggingface.co'),
+        ],
+
+        // --- Extra-EU providers: opt-in, explicit choice (FR-EM-03) ---
+
+        'openai' => [
+            'driver' => 'openai',
+            'model' => env('RAG_OPENAI_MODEL', 'text-embedding-3-small'),
+            'dimensions' => (int) env('RAG_OPENAI_DIMENSIONS', 1536),
+            'api_key' => env('RAG_OPENAI_API_KEY'),
+            'base_url' => env('RAG_OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+            'cost_per_1k' => (float) env('RAG_OPENAI_COST_PER_1K', 0.00002),
+            'options' => ['organization' => env('RAG_OPENAI_ORG')],
+        ],
+
+        'voyage' => [
+            'driver' => 'voyage',
+            'model' => env('RAG_VOYAGE_MODEL', 'voyage-3'),
+            'dimensions' => (int) env('RAG_VOYAGE_DIMENSIONS', 1024),
+            'api_key' => env('RAG_VOYAGE_API_KEY'),
+            'options' => ['input_type' => env('RAG_VOYAGE_INPUT_TYPE')], // query|document
+        ],
+
+        'cohere' => [
+            'driver' => 'cohere',
+            'model' => env('RAG_COHERE_MODEL', 'embed-multilingual-v3.0'),
+            'dimensions' => (int) env('RAG_COHERE_DIMENSIONS', 1024),
+            'api_key' => env('RAG_COHERE_API_KEY'),
+            'options' => ['input_type' => env('RAG_COHERE_INPUT_TYPE', 'search_document')],
+        ],
+
+        'gemini' => [
+            'driver' => 'gemini',
+            'model' => env('RAG_GEMINI_MODEL', 'text-embedding-004'),
+            'dimensions' => (int) env('RAG_GEMINI_DIMENSIONS', 768),
+            'api_key' => env('RAG_GEMINI_API_KEY'),
         ],
     ],
 

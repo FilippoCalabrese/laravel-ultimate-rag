@@ -17,6 +17,9 @@ use Sellinnate\RagEngine\Exceptions\EmbeddingException;
  */
 abstract class HttpEmbedder implements Embedder
 {
+    /**
+     * @param  array<string, mixed>  $options  Provider-specific extras (e.g. input_type, api_version).
+     */
     public function __construct(
         protected readonly HttpFactory $http,
         protected readonly string $model,
@@ -24,6 +27,7 @@ abstract class HttpEmbedder implements Embedder
         protected readonly string $baseUrl,
         protected readonly ?string $apiKey = null,
         protected readonly float $costPer1kTokens = 0.0,
+        protected readonly array $options = [],
     ) {}
 
     public function embed(array $texts): EmbeddingResponse
@@ -104,11 +108,30 @@ abstract class HttpEmbedder implements Embedder
 
     protected function request(): PendingRequest
     {
-        $request = $this->http->baseUrl($this->baseUrl)->acceptJson()->asJson()->timeout(30);
+        $request = $this->http
+            ->baseUrl($this->baseUrl)
+            ->acceptJson()
+            ->asJson()
+            ->timeout((int) ($this->options['timeout'] ?? 30));
 
+        return $this->applyAuth($request);
+    }
+
+    /**
+     * How the provider authenticates. Default is a Bearer token (OpenAI, Mistral,
+     * Jina, Voyage, Cohere, Hugging Face); override for header/query-based auth
+     * (Azure `api-key`, Gemini key).
+     */
+    protected function applyAuth(PendingRequest $request): PendingRequest
+    {
         return $this->apiKey !== null && $this->apiKey !== ''
             ? $request->withToken($this->apiKey)
             : $request;
+    }
+
+    protected function option(string $key, mixed $default = null): mixed
+    {
+        return $this->options[$key] ?? $default;
     }
 
     protected function cost(int $tokens): float
