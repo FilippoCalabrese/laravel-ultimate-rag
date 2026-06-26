@@ -38,7 +38,7 @@ final class KmsManager extends DriverManager
         $cipher = new AeadCipher((string) $this->app->make('config')->get('rag-engine.security.cipher', 'aes-256-gcm'));
 
         $store = ($config['store'] ?? 'array') === 'file' && isset($config['keystore'])
-            ? new FileKeyStore((string) $config['keystore'])
+            ? new FileKeyStore((string) $config['keystore'], $cipher, $config['master_key'] ?? null)
             : new ArrayKeyStore;
 
         return new LocalKms($store, $cipher);

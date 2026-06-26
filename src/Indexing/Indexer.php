@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Sellinnate\RagEngine\Indexing;
 
+use Illuminate\Contracts\Cache\LockProvider;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Sellinnate\RagEngine\Data\EmbeddingResponse;
@@ -34,6 +36,8 @@ final class Indexer
         private readonly EmbeddingService $embedding,
         private readonly VectorStoreManager $stores,
         private readonly EnvelopeEncrypter $encrypter,
+        private readonly Repository $config,
+        private readonly \Illuminate\Contracts\Cache\Repository $cache,
     ) {}
 
     /**
@@ -42,12 +46,32 @@ final class Indexer
      */
     public function index(Document $document, array $chunks, array $options = []): int
     {
-        $namespace = (string) ($options['namespace'] ?? 'documents');
+        // Serialize concurrent re-index of the same document so two runs cannot
+        // orphan each other's vectors (B-M1). Best-effort: no-op if the cache
+        // store doesn't provide atomic locks.
+        $store = $this->cache->getStore();
+
+        if ($store instanceof LockProvider) {
+            return $store->lock('rag:index:'.$document->id, 120)
+                ->block(15, fn (): int => $this->doIndex($document, $chunks, $options));
+        }
+
+        return $this->doIndex($document, $chunks, $options);
+    }
+
+    /**
+     * @param  list<TextChunk>  $chunks
+     * @param  array<string, mixed>  $options
+     */
+    private function doIndex(Document $document, array $chunks, array $options): int
+    {
+        $namespace = (string) ($options['namespace'] ?? $this->config->get('rag-engine.namespace', 'documents'));
         $tenantId = $document->tenant_id;
         $store = $this->stores->driver($options['store'] ?? null);
 
         // May throw on a dimension change — before any mutation (fail-closed).
-        $store->createNamespace($namespace, $this->embedding->embed([])->dimensions ?: 8, $options['metric'] ?? 'cosine');
+        $metric = (string) ($options['metric'] ?? $this->config->get('rag-engine.defaults.distance_metric', 'cosine'));
+        $store->createNamespace($namespace, $this->embedding->embed([])->dimensions ?: 8, $metric);
 
         // Pre-generate stable ids so vectors and rows agree.
         $rowIds = [];
@@ -72,7 +96,12 @@ final class Indexer
         // 3. Swap chunk rows in one transaction (old out, new in).
         $oldChunkIds = Chunk::where('document_id', $document->id)->pluck('id')->all();
 
-        DB::transaction(function () use ($chunks, $children, $rowIds, $response, $document, $tenantId, $namespace, $options): void {
+        DB::transaction(function () use ($chunks, $children, $rowIds, $response, $document, $tenantId, $namespace, $options, $oldChunkIds): void {
+            // Remove the previous generation's chunk rows AND their embedding
+            // records (otherwise EmbeddingRecords orphan and grow unbounded).
+            if ($oldChunkIds !== []) {
+                EmbeddingRecord::whereIn('chunk_id', $oldChunkIds)->delete();
+            }
             Chunk::where('document_id', $document->id)->delete();
 
             foreach ($chunks as $chunk) {
@@ -104,7 +133,7 @@ final class Indexer
                 }
             }
 
-            $document->forceFill(['status' => 'indexed'])->save();
+            $document->forceFill(['status' => 'indexed', 'indexed_namespace' => $namespace])->save();
         });
 
         // 4. Now the new generation is committed — drop the old vectors.

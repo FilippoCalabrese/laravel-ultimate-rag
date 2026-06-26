@@ -41,7 +41,7 @@ place and fully tested.
 use Sellinnate\RagEngine\Facades\Rag;
 
 // Envelope-encrypt content under a tenant key (BYOK).
-$payload = Rag::encrypter()->encrypt('confidential text', tenantKeyId: 'tenant-42');
+$payload = Rag::encrypter()->encrypt('confidential text', 'tenant-42');
 
 // ...later, decrypt — unless the key was crypto-shredded.
 $plain = Rag::encrypter()->decrypt($payload);

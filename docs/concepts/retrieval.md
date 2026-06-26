@@ -64,6 +64,8 @@ it with the current tenant. Cross-tenant isolation is a tested invariant.
 | Driver | Backend |
 |---|---|
 | `memory` | in-process (tests, dev) |
-| `qdrant` | Qdrant (primary, EU self-hostable) |
+| `qdrant` | Qdrant (primary, EU self-hostable, ANN at scale) |
+| `pgvector` | SQL-backed (Postgres/Neon/MySQL/SQLite) — small/on-prem tier; filtered brute-force scan (native ANN indexing is a future enhancement) |
 
-Choose per query with `->store('qdrant')`, or set the default in config.
+Choose per query with `->store('qdrant')`, or set the default in config. All
+drivers share the same contract, so switching backends needs no code changes.

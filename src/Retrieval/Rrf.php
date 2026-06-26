@@ -27,9 +27,13 @@ final class Rrf
         $hits = [];
 
         foreach ($rankings as $ranking) {
-            foreach ($ranking as $rank => $hit) {
+            // Explicit rank counter — never trust the array key (a non-list input,
+            // e.g. from array_filter without reindex, would corrupt RRF scores).
+            $rank = 0;
+            foreach ($ranking as $hit) {
                 $scores[$hit->id] = ($scores[$hit->id] ?? 0.0) + 1.0 / ($this->k + $rank + 1);
                 $hits[$hit->id] ??= $hit;
+                $rank++;
             }
         }
 

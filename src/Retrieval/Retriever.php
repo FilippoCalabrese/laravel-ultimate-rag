@@ -132,9 +132,18 @@ final class Retriever
         $out = [];
 
         foreach ($hits as $hit) {
-            $key = hash('sha256', trim($hit->content));
+            $trimmed = trim($hit->content);
 
-            if ($hit->content !== '' && isset($seen[$key])) {
+            // Don't collapse empty/whitespace-only hits together — they may be
+            // distinct chunks; only dedup hits with identical non-empty content.
+            if ($trimmed === '') {
+                $out[] = $hit;
+
+                continue;
+            }
+
+            $key = hash('sha256', $trimmed);
+            if (isset($seen[$key])) {
                 continue;
             }
 

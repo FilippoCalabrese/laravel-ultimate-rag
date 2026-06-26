@@ -51,8 +51,10 @@ $kms->rotateKey('tenant-42');                  // non-destructive
 ## Crypto-shredding (right to erasure)
 
 Deleting a tenant or document does not require scrubbing every derived copy.
-Instead you **destroy the key** — and every value encrypted under it becomes
-permanently unrecoverable, including in backups.
+Instead you **destroy the key** — and every value *encrypted* under it (source
+content, chunk text in the DB) becomes permanently unrecoverable, including in
+DB backups. Plaintext vectors are additionally **deleted from the live vector
+store** (across every namespace the tenant used); see the boundary note below.
 
 ```php
 Rag::kms()->destroyKey('tenant-42');
@@ -60,10 +62,14 @@ Rag::kms()->destroyKey('tenant-42');
 ```
 
 ::: callout warning "The honest boundary on vectors"
-Embedding vectors are **not** BYOK-encrypted: approximate-nearest-neighbour
-search needs the floats in the clear. They are protected by encryption-at-rest
-with a KMS-backed key and can be co-located inside the tenant's perimeter where
-absolute isolation is required.
+Embedding vectors — and the chunk text stored alongside them in the vector-store
+payload — are **not** BYOK-encrypted: approximate-nearest-neighbour search needs
+the floats (and lexical text for hybrid search) in the clear. They live inside
+the **tenant perimeter**, and their at-rest protection depends on the vector
+store's own encryption (e.g. Qdrant/disk encryption). Crypto-shredding a tenant
+explicitly **deletes** these vectors from the live store; pre-existing store
+backups are outside the key-destruction guarantee and must be handled by your
+backup retention policy.
 :::
 
 ## Key rotation

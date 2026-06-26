@@ -16,7 +16,7 @@ $result = Rag::ask('What are the GDPR obligations for data erasure?')
     ->topK(5)
     ->hybrid()
     ->expandParents()
-    ->using('mistral')      // LLM driver
+    ->using('fake')         // an LLM driver name from rag-engine.llms config
     ->generate();
 
 $result->answer;     // the generated answer

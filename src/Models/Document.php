@@ -26,6 +26,7 @@ use Sellinnate\RagEngine\Database\Factories\DocumentFactory;
  * @property string|null $encrypted_content_ref
  * @property string|null $dek_id
  * @property string|null $language
+ * @property string|null $indexed_namespace
  * @property Carbon|null $soft_deleted_at
  */
 class Document extends Model

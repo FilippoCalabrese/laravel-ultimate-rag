@@ -7,8 +7,8 @@ description: "Install the RAG Engine package into a Laravel application."
 
 ## Requirements
 
-- PHP **8.4+**
-- Laravel **11 or 12**
+- PHP **8.2+**
+- Laravel **11, 12 or 13**
 
 ## Install via Composer
 
