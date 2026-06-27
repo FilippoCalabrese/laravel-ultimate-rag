@@ -216,6 +216,26 @@ return [
     'llms' => [
         'null' => ['driver' => 'null'],
         'fake' => ['driver' => 'fake'],
+
+        // Anthropic Claude (generation only — Anthropic offers no embeddings).
+        'anthropic' => [
+            'driver' => 'anthropic',
+            'api_key' => env('RAG_ANTHROPIC_API_KEY'),
+            'model' => env('RAG_ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+            'base_url' => env('RAG_ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+            'max_tokens' => env('RAG_ANTHROPIC_MAX_TOKENS', 1024),
+            'version' => env('RAG_ANTHROPIC_VERSION', '2023-06-01'),
+        ],
+
+        // OpenAI-compatible chat API. Point `base_url` at any compatible
+        // provider (OpenAI, Mistral, Ollama's /v1, Groq, OpenRouter, ...).
+        'openai' => [
+            'driver' => 'openai',
+            'api_key' => env('RAG_OPENAI_LLM_API_KEY', env('RAG_OPENAI_API_KEY')),
+            'model' => env('RAG_OPENAI_LLM_MODEL', 'gpt-4o-mini'),
+            'base_url' => env('RAG_OPENAI_LLM_BASE_URL', 'https://api.openai.com/v1'),
+            'max_tokens' => env('RAG_OPENAI_LLM_MAX_TOKENS', 1024),
+        ],
     ],
 
     /*

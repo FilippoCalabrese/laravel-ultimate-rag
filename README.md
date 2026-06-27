@@ -38,6 +38,7 @@ code, one config switch.
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Indexing Eloquent models](#indexing-eloquent-models)
+- [Asking questions with an LLM](#asking-questions-with-an-llm)
 - [Configuration](#configuration)
 - [Supported drivers](#supported-drivers)
 - [Security & multi-tenancy](#security--multi-tenancy)
@@ -170,6 +171,44 @@ $article = Rag::models()->resolve($hits[0]); // App\Models\Article instance, or 
 
 See **[docs/concepts/eloquent-models.md](docs/concepts/eloquent-models.md)**.
 
+## Asking questions with an LLM
+
+Search returns the relevant chunks; an **LLM** turns them into a written, cited
+answer via `Rag::ask()`. This layer is optional and decoupled — with the default
+`null` driver, `ask()` returns the sources with an empty answer, so search-only
+apps carry no LLM dependency.
+
+The package ships two LLM drivers: **`anthropic`** (Claude) and **`openai`**
+(OpenAI and any OpenAI-compatible API — Mistral, Ollama, Groq, OpenRouter…).
+
+```dotenv
+# .env — use Anthropic Claude to answer questions
+RAG_LLM=anthropic
+RAG_ANTHROPIC_API_KEY=sk-ant-...
+RAG_ANTHROPIC_MODEL=claude-sonnet-4-6     # or claude-opus-4-8 / claude-haiku-4-5-...
+```
+
+```php
+$result = Rag::ask('What is our refund policy?')
+    ->topK(5)
+    ->using('anthropic')   // or omit to use the default RAG_LLM
+    ->generate();
+
+$result->answer;     // "Refunds are issued within 14 business days. [1]"
+$result->citations;  // [['index' => 1, 'document_id' => '…', 'chunk_id' => '…']]
+$result->sources;    // the SearchHits the answer was built from
+```
+
+> [!NOTE]
+> **Anthropic has no embedding API**, so `anthropic` is a *generation-only*
+> driver. Keep a real `RAG_EMBEDDER` (Mistral, OpenAI, Ollama…) for the search
+> side. A common combo is **Mistral/Ollama embeddings + Claude answers**.
+>
+> Retrieved content is treated as untrusted: the default prompt fences it and
+> tells the model not to follow instructions inside it (prompt-injection
+> hardening). Full guide:
+> **[docs/concepts/generation.md](docs/concepts/generation.md)**.
+
 ## Configuration
 
 Configuration lives in `config/rag-engine.php` and works like Laravel's
@@ -210,6 +249,10 @@ RAG_OPENAI_API_KEY=sk-...
 
 **Vector stores** (`RAG_VECTOR_STORE`): `memory` (tests/dev) · `pgvector`
 (Postgres/MySQL/SQLite) · `qdrant` (EU self-hostable, ANN at scale).
+
+**LLMs** (`RAG_LLM`, for `ask()`): `anthropic` (Claude) · `openai` (OpenAI and
+any OpenAI-compatible API: Mistral, Ollama, Groq, OpenRouter…) · `null`/`fake`.
+Anthropic is generation-only (no embeddings).
 
 **Parsers**: plain text · Markdown · HTML · XML · CSV/TSV · JSON · DOCX · PDF.
 

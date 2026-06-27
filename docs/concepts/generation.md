@@ -46,6 +46,84 @@ $result->sources;           // the SearchHits used to build the answer
 document and chunk it came from — so you can render clickable sources and let
 users verify the answer.
 
+## Configuring an LLM provider {#providers}
+
+`ask()->generate()` uses whichever LLM **connection** you select. Out of the box
+the default is `null` (no LLM — returns the sources with an empty answer), so to
+get real answers you configure a provider once in `.env` and pick it.
+
+The package ships two real LLM drivers:
+
+| Driver | Use it for | Default model |
+|---|---|---|
+| `anthropic` | **Anthropic Claude** (recommended) | `claude-sonnet-4-6` |
+| `openai` | OpenAI **and any OpenAI-compatible API** (Mistral, Ollama, Groq, OpenRouter…) | `gpt-4o-mini` |
+
+::: callout info "Anthropic is generation-only"
+Anthropic does **not** offer an embedding API, so `anthropic` is an **LLM driver
+only** — use it for `ask()` (writing answers). For the *embedding* side
+(`RAG_EMBEDDER`, used to make content searchable) pick any provider from
+**[Embedding & providers](/concepts/embedding)** — e.g. OpenAI, Mistral or a
+self-hosted Ollama. A common, fully-working combo is **Mistral/Ollama for
+embeddings + Claude for answers**.
+:::
+
+### Anthropic (Claude)
+
+```dotenv
+# .env
+RAG_LLM=anthropic                              # make Claude the default LLM
+RAG_ANTHROPIC_API_KEY=sk-ant-...
+RAG_ANTHROPIC_MODEL=claude-sonnet-4-6          # or claude-opus-4-8 / claude-haiku-4-5-...
+# RAG_ANTHROPIC_MAX_TOKENS=1024                 # optional
+```
+
+That's all — `Rag::ask('…')->generate()` now answers with Claude. The matching
+config block (already in `config/rag-engine.php`):
+
+```php
+'llms' => [
+    'anthropic' => [
+        'driver'     => 'anthropic',
+        'api_key'    => env('RAG_ANTHROPIC_API_KEY'),
+        'model'      => env('RAG_ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+        'base_url'   => env('RAG_ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+        'max_tokens' => env('RAG_ANTHROPIC_MAX_TOKENS', 1024),
+        'version'    => env('RAG_ANTHROPIC_VERSION', '2023-06-01'),
+    ],
+],
+```
+
+::: callout tip "Pick a Claude model for your need"
+`claude-opus-4-8` — highest quality. `claude-sonnet-4-6` — balanced
+(default). `claude-haiku-4-5-…` — fastest/cheapest. Switch with
+`RAG_ANTHROPIC_MODEL`, or per call (below).
+:::
+
+### OpenAI (and OpenAI-compatible)
+
+```dotenv
+RAG_LLM=openai
+RAG_OPENAI_LLM_API_KEY=sk-...
+RAG_OPENAI_LLM_MODEL=gpt-4o-mini
+# Point at any OpenAI-compatible API instead of OpenAI itself:
+# RAG_OPENAI_LLM_BASE_URL=http://localhost:11434/v1   # Ollama
+```
+
+### Choosing per call
+
+You don't have to change the default — pick a configured LLM for one question:
+
+```php
+Rag::ask('summarise the refund policy')->using('anthropic')->generate();
+Rag::ask('summarise the refund policy')->using('openai')->generate();
+```
+
+### Custom / other providers
+
+Any other LLM is a small driver away — implement the `Llm` contract and register
+it with `LlmManager::extend()`. See **[Custom drivers](/guides/custom-drivers)**.
+
 ## How the context is built
 
 Retrieved chunks are assembled into a **numbered, token-budgeted** context block
