@@ -19,10 +19,17 @@ engine does it for you, and refuses to let you turn it off.
 
 ## How isolation works
 
-Isolation is **namespace-per-tenant** by default: each tenant's vectors live in
-their own named bucket in the vector store, so a search physically can't reach
-another tenant's vectors. Schema-per-tenant and database-per-tenant are available
-as stricter enterprise options (`rag-engine.tenancy.isolation`).
+Isolation is **namespace-per-tenant**: each tenant's vectors live in their own
+named bucket in the vector store, so a search physically can't reach another
+tenant's vectors, and every database query is scoped by `tenant_id`.
+
+::: callout info "Supported isolation mode"
+`rag-engine.tenancy.isolation` currently supports **`namespace`** only (the
+default). Stricter `schema`-per-tenant and `database`-per-tenant modes are on the
+roadmap; to avoid a silent data-isolation surprise, the engine **fails fast at
+boot** if you set `isolation` to an unimplemented value rather than quietly
+behaving like `namespace`.
+:::
 
 ## The tenant context
 

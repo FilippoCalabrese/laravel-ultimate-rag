@@ -24,6 +24,7 @@ use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Eloquent\EmbeddableCompiler;
 use Sellinnate\RagEngine\Eloquent\ModelEmbedder;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
+use Sellinnate\RagEngine\Exceptions\RagException;
 use Sellinnate\RagEngine\Generation\ContextAssembler;
 use Sellinnate\RagEngine\Generation\RagGenerator;
 use Sellinnate\RagEngine\Indexing\Indexer;
@@ -78,6 +79,20 @@ class RagEngineServiceProvider extends PackageServiceProvider
                 ReconcileCommand::class,
                 ClearCacheCommand::class,
             ]);
+    }
+
+    public function packageBooted(): void
+    {
+        // Fail closed on an unimplemented isolation mode rather than silently
+        // applying 'namespace' behaviour (a data-isolation surprise). Only
+        // 'namespace' is supported today.
+        $isolation = (string) $this->app->make('config')->get('rag-engine.tenancy.isolation', 'namespace');
+
+        if ($isolation !== 'namespace') {
+            throw new RagException(
+                "Tenancy isolation mode [{$isolation}] is not implemented; only 'namespace' is supported."
+            );
+        }
     }
 
     public function packageRegistered(): void
@@ -324,6 +339,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
             $app->make(TenantContext::class),
             $app->make(Tokenizer::class),
             $app->make(EnvelopeEncrypter::class),
+            $app->make(LlmManager::class),
         ));
     }
 

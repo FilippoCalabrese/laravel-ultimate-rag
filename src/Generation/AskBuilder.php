@@ -69,6 +69,13 @@ final class AskBuilder
         return $this;
     }
 
+    public function expandQueries(int $variations = 3, ?string $llm = null): self
+    {
+        $this->search->expandQueries($variations, $llm);
+
+        return $this;
+    }
+
     public function using(string $llm): self
     {
         $this->llm = $llm;
@@ -94,6 +101,22 @@ final class AskBuilder
     public function generate(): GenerationResult
     {
         return $this->generator->generate(
+            $this->search->toRequest(),
+            $this->llm,
+            $this->promptTemplate,
+            $this->contextBudget,
+        );
+    }
+
+    /**
+     * Stream the answer token-by-token for chat-style UIs (FR-GE-04). Retrieval
+     * runs first (synchronously), then the LLM response is yielded as it arrives.
+     *
+     * @return iterable<string>
+     */
+    public function stream(): iterable
+    {
+        return $this->generator->stream(
             $this->search->toRequest(),
             $this->llm,
             $this->promptTemplate,

@@ -83,6 +83,26 @@ RAG_EMBEDDER=openai
 RAG_OPENAI_API_KEY=sk-...
 ```
 
+## Every subsystem, and where it's documented
+
+Each subsystem has a `defaults` entry, a named-connections block, and a dedicated
+guide:
+
+| Subsystem | `defaults` key / env | Connections block | Guide |
+|---|---|---|---|
+| Embedding | `embedder` / `RAG_EMBEDDER` | `embedders` | [Embedding & providers](/concepts/embedding) |
+| Vector store | `vector_store` / `RAG_VECTOR_STORE` | `vector_stores` | [Vector stores](/concepts/vector-stores) |
+| LLM (answers) | `llm` / `RAG_LLM` | `llms` | [Generation](/concepts/generation#providers) |
+| Reranker | `reranker` / `RAG_RERANKER` | `rerankers` | [Retrieval → reranking](/concepts/retrieval#reranking-providers) |
+| KMS (keys) | `kms` / `RAG_KMS` | `kms` | [Security & BYOK](/concepts/security) |
+| Tokenizer | `tokenizer` / `RAG_TOKENIZER` | `tokenizers` | [Chunking](/concepts/chunking) |
+
+::: callout tip "Where do I configure the Postgres connection for pgvector?"
+In `config/database.php` (a normal Laravel connection), then point the package at
+it with `RAG_PGVECTOR_CONNECTION`. The **[Vector stores](/concepts/vector-stores)**
+guide walks through it step by step.
+:::
+
 ## The main config blocks
 
 ### Security
@@ -103,7 +123,7 @@ Both encryption and PII redaction are **on by default**. See
 
 ```php
 'tenancy' => [
-    'isolation'      => env('RAG_TENANCY_ISOLATION', 'namespace'), // namespace | schema | database
+    'isolation'      => env('RAG_TENANCY_ISOLATION', 'namespace'), // only 'namespace' is supported today
     'default_tenant' => env('RAG_DEFAULT_TENANT', 'default'),
     'quotas' => [
         'max_documents'        => null,  // null = unlimited

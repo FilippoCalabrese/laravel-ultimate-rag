@@ -1,6 +1,6 @@
 # RAG Engine for Laravel
 
-[![Tests](https://img.shields.io/badge/tests-377%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-401%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)]()
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-blue)]()
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)]()
@@ -248,11 +248,17 @@ RAG_OPENAI_API_KEY=sk-...
 | `fake` | deterministic (tests) | local |
 
 **Vector stores** (`RAG_VECTOR_STORE`): `memory` (tests/dev) · `pgvector`
-(Postgres/MySQL/SQLite) · `qdrant` (EU self-hostable, ANN at scale).
+(SQL-backed: Postgres/MySQL/SQLite) · `qdrant` (EU self-hostable, ANN at scale).
+Full setup, including **where to configure the Postgres connection**, is in the
+[Vector stores guide](https://laravel-rag-engine.selli.io/concepts/vector-stores).
 
 **LLMs** (`RAG_LLM`, for `ask()`): `anthropic` (Claude) · `openai` (OpenAI and
 any OpenAI-compatible API: Mistral, Ollama, Groq, OpenRouter…) · `null`/`fake`.
-Anthropic is generation-only (no embeddings).
+Anthropic is generation-only (no embeddings). Answers can be **streamed** with
+`Rag::ask(...)->stream()`.
+
+**Rerankers** (`RAG_RERANKER`, optional cross-encoder pass): `cohere` · `jina`
+(EU) · `null`/`fake`.
 
 **Parsers**: plain text · Markdown · HTML · XML · CSV/TSV · JSON · DOCX · PDF.
 
@@ -307,12 +313,13 @@ npm run docs:build   # static site into ./site
 - 🚀 [Quickstart](https://laravel-rag-engine.selli.io/getting-started/quickstart) — a complete worked example.
 - 🏗️ [Architecture](https://laravel-rag-engine.selli.io/concepts/architecture) — how the pieces fit together.
 - 📥 [Ingesting content](https://laravel-rag-engine.selli.io/guides/ingestion) · 🔎 [Retrieval & search](https://laravel-rag-engine.selli.io/concepts/retrieval) · 💬 [Generation](https://laravel-rag-engine.selli.io/concepts/generation)
+- 🗄️ [Vector stores & configuration](https://laravel-rag-engine.selli.io/concepts/vector-stores) — incl. pgvector Postgres setup.
 - 🧩 [Contracts reference](https://laravel-rag-engine.selli.io/reference/contracts) · 🛠️ [Custom drivers](https://laravel-rag-engine.selli.io/guides/custom-drivers)
 
 ## Testing & development
 
 ```bash
-composer test         # run the Pest suite (377 tests)
+composer test         # run the Pest suite (401 tests)
 composer analyse      # PHPStan, level 8
 composer format       # Laravel Pint (code style)
 
@@ -320,7 +327,7 @@ composer format       # Laravel Pint (code style)
 XDEBUG_MODE=coverage vendor/bin/pest --coverage --min=90
 ```
 
-Quality gates kept green on every change: **377 tests**, **PHPStan level 8**,
+Quality gates kept green on every change: **401 tests**, **PHPStan level 8**,
 **Pint** clean, **≥90% coverage**.
 
 ## License

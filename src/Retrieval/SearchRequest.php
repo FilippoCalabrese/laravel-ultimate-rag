@@ -31,10 +31,13 @@ final class SearchRequest
         public readonly ?int $fetchK = null,
         public readonly ?string $embedder = null,
         public readonly ?string $store = null,
+        public readonly bool $expandQueries = false,
+        public readonly int $queryVariations = 3,
+        public readonly ?string $llm = null,
     ) {}
 
     /**
-     * Candidate pool size: larger when rerank/MMR/hybrid need headroom.
+     * Candidate pool size: larger when rerank/MMR/hybrid/multi-query need headroom.
      */
     public function effectiveFetchK(): int
     {
@@ -42,7 +45,7 @@ final class SearchRequest
             return max($this->fetchK, $this->topK);
         }
 
-        return ($this->rerank || $this->mmr || $this->hybrid)
+        return ($this->rerank || $this->mmr || $this->hybrid || $this->expandQueries)
             ? max($this->topK * 4, $this->topK)
             : $this->topK;
     }

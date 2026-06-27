@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Retrieval;
 
 use Sellinnate\RagEngine\Contracts\Tokenizer;
+use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Data\EncryptedPayload;
 use Sellinnate\RagEngine\Data\RetrievalQuery;
 use Sellinnate\RagEngine\Data\SearchHit;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Events\SearchPerformed;
+use Sellinnate\RagEngine\Managers\LlmManager;
 use Sellinnate\RagEngine\Managers\RerankerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
 use Sellinnate\RagEngine\Models\Chunk;
+use Sellinnate\RagEngine\Query\MultiQueryTransformer;
 use Sellinnate\RagEngine\Security\EnvelopeEncrypter;
 use Sellinnate\RagEngine\Tenancy\TenantContext;
 
@@ -32,10 +35,56 @@ final class Retriever
         private readonly TenantContext $tenant,
         private readonly Tokenizer $tokenizer,
         private readonly EnvelopeEncrypter $encrypter,
+        private readonly LlmManager $llms,
         private readonly Rrf $rrf = new Rrf,
         private readonly Mmr $mmr = new Mmr,
         private readonly KeywordScorer $keyword = new KeywordScorer,
     ) {}
+
+    /**
+     * Resolve the query (or its multi-query expansions) to retrieve for.
+     *
+     * @return list<string>
+     */
+    private function resolveQueries(SearchRequest $request): array
+    {
+        if (! $request->expandQueries) {
+            return [$request->text];
+        }
+
+        // With the null LLM this degrades to just the original query.
+        $transformer = new MultiQueryTransformer($this->llms->driver($request->llm), $request->queryVariations);
+
+        return $transformer->transform($request->text);
+    }
+
+    /**
+     * Retrieve a single query's candidate pool: vector search plus, when hybrid
+     * is on, a BM25 keyword ranking fused via RRF.
+     *
+     * @return list<SearchHit>
+     */
+    private function gatherCandidates(string $queryText, SearchRequest $request, VectorStore $store, string $tenantId, int $fetchK): array
+    {
+        $vector = $this->embedding->embed([$queryText], $request->embedder)->vectorAt(0);
+
+        $query = new RetrievalQuery(
+            text: $queryText,
+            topK: $fetchK,
+            filters: $request->filters,
+            namespace: $request->namespace,
+            tenantId: $tenantId,
+        );
+
+        $candidates = $store->search($request->namespace, $vector, $query);
+
+        if ($request->hybrid) {
+            $keywordRanking = $this->keyword->rank($queryText, $candidates, $fetchK);
+            $candidates = $this->rrf->fuse([$candidates, $keywordRanking], $fetchK);
+        }
+
+        return $candidates;
+    }
 
     /**
      * @return list<SearchHit>
@@ -47,22 +96,20 @@ final class Retriever
         $store = $this->stores->driver($request->store);
         $fetchK = $request->effectiveFetchK();
 
+        // The MMR diversification step compares against the ORIGINAL query.
         $queryVector = $this->embedding->embed([$request->text], $request->embedder)->vectorAt(0);
 
-        $query = new RetrievalQuery(
-            text: $request->text,
-            topK: $fetchK,
-            filters: $request->filters,
-            namespace: $request->namespace,
-            tenantId: $tenantId,
-        );
+        // Multi-query expansion (FR-QT-01): retrieve each phrasing and RRF-fuse.
+        $queries = $this->resolveQueries($request);
 
-        $candidates = $store->search($request->namespace, $queryVector, $query);
-
-        if ($request->hybrid) {
-            $keywordRanking = $this->keyword->rank($request->text, $candidates, $fetchK);
-            $candidates = $this->rrf->fuse([$candidates, $keywordRanking], $fetchK);
+        $candidateLists = [];
+        foreach ($queries as $queryText) {
+            $candidateLists[] = $this->gatherCandidates($queryText, $request, $store, $tenantId, $fetchK);
         }
+
+        $candidates = count($candidateLists) > 1
+            ? $this->rrf->fuse($candidateLists, $fetchK)
+            : ($candidateLists[0] ?? []);
 
         if ($request->rerank) {
             $candidates = $this->rerankers->driver($request->rerankerName)->rerank($request->text, $candidates, $fetchK);

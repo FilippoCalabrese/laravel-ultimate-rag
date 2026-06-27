@@ -50,7 +50,8 @@ Chain only what you need — each method returns the builder:
 | `->rerank()` | Re-score the top hits with a more accurate model. | Squeeze out maximum precision. |
 | `->expandParents()` | Replace matched child chunks with their larger parents. | With parent-child chunking, for context. |
 | `->contextBudget(2000)` | Trim results to fit this many tokens. | Feeding results to an LLM. |
-| `->dedup()` | Remove duplicate/near-identical chunks. | Noisy corpora with repeated text. |
+| `->dedup()` | Remove **exact duplicate** chunks (identical text). | Noisy corpora with repeated text. |
+| `->expandQueries(3)` | Rephrase the query into N variants with an LLM, retrieve each, fuse (multi-query). | Improve recall on differently-worded questions. |
 | `->fetch(50)` | How many candidates to pull *before* rerank/MMR trim to `topK`. | Tune recall vs cost. |
 | `->using('openai')` | Use a specific embedder for the query. | Match the one you indexed with. |
 | `->store('qdrant')` | Query a specific vector store. | Override the default backend. |
@@ -89,10 +90,40 @@ right ranking) — not by default.
   the same sentence.
 - **Reranking** sends the top candidates to a slower, more accurate model (a
   *cross-encoder*) that reads the query and each chunk together. It noticeably
-  improves the final ordering at some latency/cost.
+  improves the final ordering at some latency/cost. The package ships real
+  reranker drivers — see [configuring a reranker](#reranking-providers) below.
+- **Multi-query** (`expandQueries`) asks an LLM for several rephrasings of the
+  question, retrieves each, and fuses the results with RRF — improving recall
+  when users phrase things differently from your content. It needs a configured
+  LLM (see [Generation](/concepts/generation#providers)); with the `null` LLM it
+  safely falls back to the single original query.
 - **Parent expansion** (`expandParents`) pairs with parent-child
   [chunking](/concepts/chunking): you match on precise small chunks but return
   their larger parents so the answer has context.
+
+## Reranking providers {#reranking-providers}
+
+`->rerank()` uses whichever reranker `connection` you select. The default is
+`null` (no reranking). The package ships two real cross-encoder drivers:
+
+| Driver | Provider | Notes |
+|---|---|---|
+| `cohere` | Cohere Rerank | `rerank-v3.5`, `rerank-multilingual-v3.0` |
+| `jina` | Jina reranker | `jina-reranker-v2-base-multilingual` (EU) |
+
+```dotenv
+# .env — make Cohere the default reranker
+RAG_RERANKER=cohere
+RAG_COHERE_RERANK_API_KEY=...        # falls back to RAG_COHERE_API_KEY if unset
+```
+
+```php
+Rag::search('q')->rerank()->get();           // default reranker
+Rag::search('q')->rerank('jina')->get();     // a specific one for this call
+```
+
+Need a different provider? Implement the `Reranker` contract and register it —
+see **[Custom drivers](/guides/custom-drivers)**.
 
 ## Indexing (so there's something to search)
 
@@ -139,12 +170,13 @@ convention. See **[Multi-tenancy](/concepts/multi-tenancy)**.
 | Driver | Backend | Use when |
 |---|---|---|
 | `memory` | In-process | Tests and local dev (resets each run). |
-| `pgvector` | SQL (Postgres/Neon/MySQL/SQLite) | Small/medium corpora on your existing DB. |
+| `pgvector` | SQL (Postgres/MySQL/SQLite) | Small/medium corpora on your existing DB. |
 | `qdrant` | Qdrant (EU self-hostable) | Large corpora needing fast approximate search at scale. |
 
 Switch per query with `->store('qdrant')`, or set the default in config. All three
 share the same contract, so changing backend needs **no code changes** — only a
-re-index into the new store.
+re-index into the new store. For full setup of each (including **where to put the
+Postgres connection for pgvector**), see **[Vector stores](/concepts/vector-stores)**.
 
 ## Best practices
 
@@ -164,8 +196,10 @@ re-index into the new store.
   is too high.
 - **Irrelevant results?** Likely the `fake` embedder — switch to a real one.
 - **Expecting cross-tenant results?** They won't appear; that's by design.
-- **`rerank()` does nothing?** A reranker driver must be configured
-  (`RAG_RERANKER`); the default is `null`.
+- **`rerank()` does nothing?** Configure a real reranker — set `RAG_RERANKER` to
+  `cohere` or `jina` (the default is `null`, which is a no-op).
+- **`expandQueries()` returns the same as a plain search?** It needs a configured
+  LLM (`RAG_LLM`); with the `null` LLM it falls back to the original query.
 :::
 
 ## Next

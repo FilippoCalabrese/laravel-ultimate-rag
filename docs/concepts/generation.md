@@ -148,9 +148,31 @@ different framing — but keep the untrusted-context fencing.
 
 ## Streaming
 
-For chat-style UIs that show the answer as it's written, LLM drivers expose a
-`stream()` method for token-by-token output. Wire it to a streamed HTTP response
-(SSE) or a websocket.
+For chat-style UIs that show the answer as it's written, call `->stream()` on the
+`ask()` builder instead of `->generate()`. Retrieval runs first (synchronously),
+then the LLM's answer is yielded **token by token**:
+
+```php
+foreach (Rag::ask('What is our refund policy?')->using('anthropic')->stream() as $token) {
+    echo $token;          // append to an SSE response, websocket, etc.
+}
+```
+
+`stream()` returns an `iterable<string>`. Wire it to a streamed HTTP response:
+
+```php
+return response()->stream(function () use ($question) {
+    foreach (Rag::ask($question)->using('anthropic')->stream() as $token) {
+        echo "data: {$token}\n\n";
+        ob_flush();
+        flush();
+    }
+}, 200, ['Content-Type' => 'text/event-stream']);
+```
+
+Both shipped drivers (Anthropic, OpenAI) stream natively over server-sent events;
+with the `null`/`fake` drivers, `stream()` simply yields nothing / a canned
+answer, so your code path is always safe.
 
 ## No LLM? No problem
 
