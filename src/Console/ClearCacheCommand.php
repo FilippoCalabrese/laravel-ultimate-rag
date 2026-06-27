@@ -6,6 +6,7 @@ namespace Sellinnate\RagEngine\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Sellinnate\RagEngine\Console\Concerns\NormalizesInput;
 use Sellinnate\RagEngine\Embedding\CachingEmbedder;
 use Throwable;
 
@@ -16,14 +17,17 @@ use Throwable;
  */
 final class ClearCacheCommand extends Command
 {
+    use NormalizesInput;
+
     protected $signature = 'rag:clear-cache {--tenant= : Only this tenant}';
 
     protected $description = 'Clear cached embeddings';
 
     public function handle(Cache $cache): int
     {
-        $tag = $this->option('tenant')
-            ? CachingEmbedder::tenantTag((string) $this->option('tenant'))
+        $tenant = $this->stringOption('tenant');
+        $tag = $tenant !== null
+            ? CachingEmbedder::tenantTag($tenant)
             : 'rag:emb';
 
         try {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Console;
 
 use Illuminate\Console\Command;
+use Sellinnate\RagEngine\Console\Concerns\NormalizesInput;
 use Sellinnate\RagEngine\Observability\UsageRecorder;
 use Sellinnate\RagEngine\Tenancy\TenantQuota;
 
@@ -13,14 +14,16 @@ use Sellinnate\RagEngine\Tenancy\TenantQuota;
  */
 final class StatsCommand extends Command
 {
+    use NormalizesInput;
+
     protected $signature = 'rag:stats {tenant : The tenant id} {--period= : YYYY-MM period}';
 
     protected $description = 'Show token/cost usage and quota consumption for a tenant';
 
     public function handle(UsageRecorder $usage, TenantQuota $quota): int
     {
-        $tenant = (string) $this->argument('tenant');
-        $period = $this->option('period');
+        $tenant = $this->stringArgument('tenant');
+        $period = $this->stringOption('period');
 
         $snapshot = $quota->usageSnapshot($tenant);
 

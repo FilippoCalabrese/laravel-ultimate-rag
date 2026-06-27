@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Console;
 
 use Illuminate\Console\Command;
+use Sellinnate\RagEngine\Console\Concerns\NormalizesInput;
 use Sellinnate\RagEngine\Recovery\Reconciler;
 
 /**
@@ -12,13 +13,15 @@ use Sellinnate\RagEngine\Recovery\Reconciler;
  */
 final class ReconcileCommand extends Command
 {
+    use NormalizesInput;
+
     protected $signature = 'rag:reconcile {tenant : The tenant id}';
 
     protected $description = 'Report chunks missing vectors and orphan embeddings for a tenant';
 
     public function handle(Reconciler $reconciler): int
     {
-        $tenant = (string) $this->argument('tenant');
+        $tenant = $this->stringArgument('tenant');
         $report = $reconciler->reconcile($tenant);
 
         $this->table(['Issue', 'Count'], [

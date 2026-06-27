@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Console;
 
 use Illuminate\Console\Command;
+use Sellinnate\RagEngine\Console\Concerns\NormalizesInput;
 use Sellinnate\RagEngine\Security\CryptoShredder;
 
 /**
@@ -12,13 +13,15 @@ use Sellinnate\RagEngine\Security\CryptoShredder;
  */
 final class PurgeCommand extends Command
 {
+    use NormalizesInput;
+
     protected $signature = 'rag:purge {tenant : The tenant id} {--reason=} {--force : Skip confirmation}';
 
     protected $description = 'Crypto-shred a tenant: destroy its key and purge all derived data';
 
     public function handle(CryptoShredder $shredder): int
     {
-        $tenant = (string) $this->argument('tenant');
+        $tenant = $this->stringArgument('tenant');
 
         if (! $this->option('force') && ! $this->confirm("Permanently crypto-shred tenant [{$tenant}]? This is irreversible.")) {
             $this->warn('Aborted.');
@@ -26,7 +29,7 @@ final class PurgeCommand extends Command
             return self::FAILURE;
         }
 
-        $shredder->shredTenant($tenant, $this->option('reason'));
+        $shredder->shredTenant($tenant, $this->stringOption('reason'));
         $this->info("Tenant [{$tenant}] has been crypto-shredded.");
 
         return self::SUCCESS;

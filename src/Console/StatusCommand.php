@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine\Console;
 
 use Illuminate\Console\Command;
+use Sellinnate\RagEngine\Console\Concerns\NormalizesInput;
 use Sellinnate\RagEngine\Models\Document;
 
 /**
@@ -12,6 +13,8 @@ use Sellinnate\RagEngine\Models\Document;
  */
 final class StatusCommand extends Command
 {
+    use NormalizesInput;
+
     protected $signature = 'rag:status {--tenant= : Limit to a tenant}';
 
     protected $description = 'Show document counts grouped by pipeline status';
@@ -20,7 +23,7 @@ final class StatusCommand extends Command
     {
         $query = Document::query();
 
-        if ($tenant = $this->option('tenant')) {
+        if (($tenant = $this->stringOption('tenant')) !== null) {
             $query->where('tenant_id', $tenant);
         }
 
