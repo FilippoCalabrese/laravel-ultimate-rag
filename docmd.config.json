@@ -72,7 +72,7 @@
         { "title": "Contracts", "path": "/reference/contracts", "icon": "file-text" }
       ]
     },
-    { "title": "GitHub", "path": "https://github.com/sellinnate/rag-engine", "icon": "github", "external": true }
+    { "title": "GitHub", "path": "https://github.com/Sellinnate/laravel-ultimate-rag", "icon": "github", "external": true }
   ],
   "plugins": {
     "git": { "commitHistory": true, "maxCommits": 5 },
