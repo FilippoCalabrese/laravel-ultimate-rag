@@ -11,7 +11,7 @@
         "qdrant",
         "pgvector"
     ],
-    "homepage": "https://github.com/sellinnate/rag-engine",
+    "homepage": "https://github.com/Sellinnate/laravel-ultimate-rag",
     "license": "MIT",
     "authors": [
         {
@@ -22,8 +22,8 @@
     ],
     "support": {
         "docs": "https://laravel-rag-engine.selli.io",
-        "issues": "https://github.com/sellinnate/rag-engine/issues",
-        "source": "https://github.com/sellinnate/rag-engine"
+        "issues": "https://github.com/Sellinnate/laravel-ultimate-rag/issues",
+        "source": "https://github.com/Sellinnate/laravel-ultimate-rag"
     },
     "require": {
         "php": "^8.2",
