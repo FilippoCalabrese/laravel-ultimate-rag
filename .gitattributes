@@ -1,6 +1,25 @@
 # Path-based git attributes
 # https://www.kernel.org/pub/software/scm/git/docs/gitattributes.html
 
+# Normalize line endings to LF for all text files on every OS. Without this,
+# Windows runners (core.autocrlf=true) check out files with CRLF, which breaks
+# EOL-sensitive assertions and — critically — corrupts binary fixtures.
+* text=auto eol=lf
+
+# Treat these as binary so line-ending conversion never touches them. The PDF
+# test fixture in particular gets corrupted by CRLF conversion on Windows,
+# causing smalot/pdfparser to fail with "Invalid object reference".
+*.pdf   binary
+*.docx  binary
+*.zip   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+
 # Ignore all test and documentation with "export-ignore".
 /.github            export-ignore
 /.gitattributes     export-ignore
