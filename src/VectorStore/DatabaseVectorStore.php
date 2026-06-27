@@ -14,13 +14,14 @@ use Sellinnate\RagEngine\Support\MetadataMatcher;
 use Sellinnate\RagEngine\Support\Vectors;
 
 /**
- * SQL-backed vector store (the `pgvector` driver) for small tenants / on-prem
- * (FR-VS-02). Vectors are stored as JSON and scored with a filtered brute-force
- * scan in PHP — correct and portable (works on Postgres/Neon, MySQL, SQLite).
+ * Portable SQL-backed vector store (the `database` driver) for small tenants /
+ * on-prem (FR-VS-02). Vectors are stored as JSON and scored with a filtered
+ * brute-force scan in PHP — correct and portable (works on Postgres, MySQL,
+ * SQLite). For native ANN inside Postgres use the `pgvector` driver
+ * ({@see PgVectorStore}); for large scale use Qdrant.
  *
- * This is the "small scale" tier; native pgvector ANN indexing is a future
- * optimisation. Tenant scoping is pushed down to SQL (`tenant_id = ?`); richer
- * metadata operators are applied in PHP via {@see MetadataMatcher}.
+ * Tenant scoping is pushed down to SQL (`tenant_id = ?`); richer metadata
+ * operators are applied in PHP via {@see MetadataMatcher}.
  */
 final class DatabaseVectorStore implements VectorStore
 {
@@ -187,7 +188,7 @@ final class DatabaseVectorStore implements VectorStore
 
     public function name(): string
     {
-        return 'pgvector';
+        return 'database';
     }
 
     /**

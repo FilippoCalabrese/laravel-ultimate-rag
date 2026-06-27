@@ -79,8 +79,8 @@ code, one config switch.
 | A database | any Laravel-supported (SQLite is fine to start) |
 
 A dedicated vector database is **not** required to begin: the default store is
-in-memory, and `pgvector` works on plain Postgres/MySQL/SQLite. Reach for Qdrant
-only at larger scale.
+in-memory, and the `database` store works on plain Postgres/MySQL/SQLite. Use
+native `pgvector` or Qdrant at larger scale.
 
 ## Installation
 
@@ -247,10 +247,11 @@ RAG_OPENAI_API_KEY=sk-...
 | `ollama` | Ollama (BGE/E5/Nomic) | self-hosted |
 | `fake` | deterministic (tests) | local |
 
-**Vector stores** (`RAG_VECTOR_STORE`): `memory` (tests/dev) · `pgvector`
-(SQL-backed: Postgres/MySQL/SQLite) · `qdrant` (EU self-hostable, ANN at scale).
-Full setup, including **where to configure the Postgres connection**, is in the
-[Vector stores guide](https://laravel-rag-engine.selli.io/concepts/vector-stores).
+**Vector stores** (`RAG_VECTOR_STORE`): `memory` (tests/dev) · `database`
+(portable SQL: Postgres/MySQL/SQLite, brute-force) · `pgvector` (**native**
+Postgres ANN: `vector` column + HNSW + `<=>`) · `qdrant` (EU self-hostable, ANN at
+scale). Full setup, including **where to configure the Postgres connection**, is
+in the [Vector stores guide](https://laravel-rag-engine.selli.io/concepts/vector-stores).
 
 **LLMs** (`RAG_LLM`, for `ask()`): `anthropic` (Claude) · `openai` (OpenAI and
 any OpenAI-compatible API: Mistral, Ollama, Groq, OpenRouter…) · `null`/`fake`.

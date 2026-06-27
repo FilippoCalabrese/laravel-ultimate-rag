@@ -170,8 +170,9 @@ convention. See **[Multi-tenancy](/concepts/multi-tenancy)**.
 | Driver | Backend | Use when |
 |---|---|---|
 | `memory` | In-process | Tests and local dev (resets each run). |
-| `pgvector` | SQL (Postgres/MySQL/SQLite) | Small/medium corpora on your existing DB. |
-| `qdrant` | Qdrant (EU self-hostable) | Large corpora needing fast approximate search at scale. |
+| `database` | Portable SQL (Postgres/MySQL/SQLite) | Small/medium corpora on your existing DB. |
+| `pgvector` | Native Postgres ANN (`vector` + HNSW) | Postgres at scale, index-backed search. |
+| `qdrant` | Qdrant (EU self-hostable) | Large corpora, any stack. |
 
 Switch per query with `->store('qdrant')`, or set the default in config. All three
 share the same contract, so changing backend needs **no code changes** — only a

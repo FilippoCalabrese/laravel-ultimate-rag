@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\VectorStore\DatabaseVectorStore;
 use Sellinnate\RagEngine\VectorStore\InMemoryVectorStore;
+use Sellinnate\RagEngine\VectorStore\PgVectorStore;
 use Sellinnate\RagEngine\VectorStore\QdrantStore;
 
 /**
@@ -51,14 +52,35 @@ final class VectorStoreManager extends DriverManager
     }
 
     /**
+     * Portable SQL store — brute-force scoring in PHP; works on any connection
+     * (Postgres/MySQL/SQLite). Good for small/medium corpora.
+     *
      * @param  array<string, mixed>  $config
      */
-    protected function createPgvectorDriver(array $config): VectorStore
+    protected function createDatabaseDriver(array $config): VectorStore
     {
         return new DatabaseVectorStore(
             db: $this->app->make(ConnectionResolverInterface::class),
             connection: $config['connection'] ?? null,
             table: (string) ($config['table'] ?? 'rag_vectors'),
+        );
+    }
+
+    /**
+     * Native pgvector store — real ANN inside Postgres (`vector` column, HNSW
+     * index, `<=>` operators). Postgres + the `vector` extension required.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    protected function createPgvectorDriver(array $config): VectorStore
+    {
+        return new PgVectorStore(
+            db: $this->app->make(ConnectionResolverInterface::class),
+            connection: $config['connection'] ?? null,
+            table: (string) ($config['table'] ?? 'rag_pgvectors'),
+            dimensions: (int) ($config['dimensions'] ?? 1536),
+            metric: (string) $this->app->make('config')->get('rag-engine.defaults.distance_metric', 'cosine'),
+            index: (string) ($config['index'] ?? 'hnsw'),
         );
     }
 }

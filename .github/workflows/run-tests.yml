@@ -69,3 +69,44 @@ jobs:
 
       - name: Execute tests
         run: vendor/bin/pest --ci
+
+  pgvector:
+    name: pgvector integration (Postgres + vector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, pdo_pgsql, bcmath, intl, fileinfo
+          coverage: none
+
+      - name: Install dependencies
+        uses: ramsey/composer-install@v4
+
+      - name: Run native pgvector tests against a real Postgres
+        env:
+          RAG_PGVECTOR_TEST: '1'
+          RAG_PGVECTOR_TEST_HOST: 127.0.0.1
+          RAG_PGVECTOR_TEST_PORT: '5432'
+          RAG_PGVECTOR_TEST_DB: rag
+          RAG_PGVECTOR_TEST_USER: postgres
+          RAG_PGVECTOR_TEST_PASSWORD: postgres
+        run: vendor/bin/pest tests/Feature/VectorStore/PgVectorStoreTest.php --ci

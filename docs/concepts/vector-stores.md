@@ -1,14 +1,14 @@
 ---
 title: "Vector stores (storage & config)"
-description: "The three vector-store backends, when to use each, and exactly how to configure them — including the Postgres connection for pgvector."
+description: "The four vector-store backends, when to use each, and exactly how to configure them — including the Postgres connection and native pgvector."
 ---
 
 # Vector stores
 
 A **vector store** is the database that holds your chunk vectors and finds the
-ones nearest to a query. This page explains the three backends the package
-ships, when to use each, and — step by step — how to configure them. New to the
-idea of a vector? Read **[What is RAG?](/getting-started/what-is-rag)** first.
+ones nearest to a query. This page explains the backends the package ships, when
+to use each, and — step by step — how to configure them. New to the idea of a
+vector? Read **[What is RAG?](/getting-started/what-is-rag)** first.
 
 ::: callout info "In plain words"
 After a chunk is embedded into a vector (a list of numbers), it has to live
@@ -22,13 +22,26 @@ search — stays exactly the same.
 | Backend (`RAG_VECTOR_STORE`) | What it is | Use it when | Scale |
 |---|---|---|---|
 | `memory` | In-process, in-RAM | Tests & local dev | Tiny; **resets every run** |
-| `pgvector` | SQL-backed (your database) | Small/medium apps, on-prem, "just use my DB" | ~up to tens of thousands of chunks |
-| `qdrant` | A dedicated Qdrant server | Production at scale, fast approximate search | Millions+ |
+| `database` | Portable SQL (any Laravel DB) | Small/medium apps, "just use my DB" | ~up to tens of thousands of chunks |
+| `pgvector` | **Native** Postgres + `vector` extension | Production on Postgres, real ANN | Large |
+| `qdrant` | A dedicated Qdrant server | Production at scale, any stack | Millions+ |
+
+::: callout tip "`database` vs `pgvector` — the honest difference"
+Both can run on Postgres, but they work very differently:
+
+- **`database`** stores vectors as JSON and scores them with a **brute-force scan
+  in PHP**. Portable (Postgres/MySQL/SQLite), zero setup, but it reads every
+  vector in a namespace per query — fine for thousands, not millions.
+- **`pgvector`** uses Postgres's native `vector` column type, an **HNSW index**,
+  and the `<=>` distance operators, so scoring and top-k happen **inside Postgres**
+  against an index. This is "real" approximate-nearest-neighbour search and needs
+  the `vector` extension.
+:::
 
 You choose the default in `.env`:
 
 ```dotenv
-RAG_VECTOR_STORE=pgvector   # memory | pgvector | qdrant
+RAG_VECTOR_STORE=database   # memory | database | pgvector | qdrant
 ```
 
 …or per query, without changing the default:
@@ -37,7 +50,7 @@ RAG_VECTOR_STORE=pgvector   # memory | pgvector | qdrant
 Rag::search('q')->store('qdrant')->get();
 ```
 
-All three implement the same contract, so **switching backend needs no code
+All backends implement the same contract, so **switching backend needs no code
 changes** — only config and a re-index into the new store.
 
 ---
@@ -54,131 +67,131 @@ RAG_VECTOR_STORE=memory
 ::: callout warning "Not for production"
 The in-memory store is wiped when the process ends and isn't shared between
 workers or requests. It exists so the test suite and local experiments run with
-no external services. Use `pgvector` or `qdrant` for anything real.
+no external services.
 :::
 
 ---
 
-## 2. `pgvector` — store vectors in your SQL database
+## 2. `database` — portable SQL store
 
-This backend keeps vectors in two tables in a normal Laravel database connection
-(`rag_vectors` and `rag_vector_namespaces`, created by the package migration). It
-works on **Postgres, MySQL and SQLite**.
+Keeps vectors in two tables (`rag_vectors`, `rag_vector_namespaces`) created by
+the package migration. Works on **Postgres, MySQL and SQLite**, with no
+extensions. Scoring is a filtered brute-force scan in PHP — great up to roughly
+tens of thousands of chunks.
 
-::: callout info "How it searches (be honest about scale)"
-Today this driver scores candidates with a **filtered brute-force scan in PHP**
-(tenant filtering is pushed down to SQL). That's correct and portable, and great
-for up to roughly tens of thousands of chunks. It does **not yet** use the
-Postgres `pgvector` extension's native ANN index — that's a planned optimisation.
-For large corpora, use **[Qdrant](#3-qdrant--a-dedicated-vector-database)**.
-:::
+### Simplest setup — your app's default database
 
-### 2a. The simplest setup — use your app's default database
-
-If you're happy storing vectors in your app's existing database, you're almost
-done. The package migration already created the `rag_vectors` tables there when
-you ran `php artisan migrate`. Just select the driver:
+The migration already created the tables on your default connection, so just:
 
 ```dotenv
-RAG_VECTOR_STORE=pgvector
-# RAG_PGVECTOR_CONNECTION is left unset → uses your DB_CONNECTION default
+RAG_VECTOR_STORE=database
+# RAG_DB_VECTOR_CONNECTION unset → uses your DB_CONNECTION default
 ```
 
-That's it. SQLite, MySQL or Postgres — whatever your app already uses — works.
+### Using a specific connection
 
-### 2b. Using a dedicated Postgres connection (the common question)
-
-**"Where do I specify the Postgres connection?"** — in your app's
-`config/database.php`, exactly like any other Laravel connection, then point the
-package at it by name.
-
-**Step 1 — define a Postgres connection** in `config/database.php`:
-
-```php
-// config/database.php
-'connections' => [
-    // ...your existing connections...
-
-    'pgsql' => [
-        'driver'   => 'pgsql',
-        'host'     => env('DB_PG_HOST', '127.0.0.1'),
-        'port'     => env('DB_PG_PORT', '5432'),
-        'database' => env('DB_PG_DATABASE', 'rag'),
-        'username' => env('DB_PG_USERNAME', 'postgres'),
-        'password' => env('DB_PG_PASSWORD', ''),
-        'charset'  => 'utf8',
-        'prefix'   => '',
-        'search_path' => 'public',
-        'sslmode'  => 'prefer',
-    ],
-],
-```
-
-**Step 2 — set the credentials** in `.env`:
+Define any connection in `config/database.php`, then name it:
 
 ```dotenv
-DB_PG_HOST=127.0.0.1
-DB_PG_PORT=5432
-DB_PG_DATABASE=rag
-DB_PG_USERNAME=postgres
-DB_PG_PASSWORD=secret
+RAG_VECTOR_STORE=database
+RAG_DB_VECTOR_CONNECTION=pgsql     # a connection NAME from config/database.php
 ```
 
-**Step 3 — tell the package to use that connection**:
-
-```dotenv
-RAG_VECTOR_STORE=pgvector
-RAG_PGVECTOR_CONNECTION=pgsql      # the connection NAME from config/database.php
-```
-
-**Step 4 — make sure the RAG tables exist on that connection.** This is the easy
-thing to miss: `php artisan migrate` ran the package migrations on your *default*
-connection. If `pgsql` is a *different* database, run them there too:
+If that connection is a *different* database, run the package migrations there:
 
 ```bash
 php artisan migrate --database=pgsql
 ```
 
-::: callout tip "How the connection is resolved"
-The package reads `rag-engine.vector_stores.pgvector.connection`
-(`RAG_PGVECTOR_CONNECTION`). If it's **null/unset**, it uses Laravel's **default**
-connection (`DB_CONNECTION`). If set, it uses that named connection — which must
-contain the `rag_vectors` and `rag_vector_namespaces` tables.
-:::
-
-### The config block
-
 ```php
 // config/rag-engine.php
-'vector_stores' => [
-    'pgvector' => [
-        'driver'     => 'pgvector',
-        'connection' => env('RAG_PGVECTOR_CONNECTION'), // null = app default connection
-        'table'      => 'rag_vectors',                  // override if you renamed it
-    ],
+'database' => [
+    'driver'     => 'database',
+    'connection' => env('RAG_DB_VECTOR_CONNECTION'), // null = app default
+    'table'      => 'rag_vectors',
 ],
 ```
 
-### Optional: the real `pgvector` Postgres extension
+---
 
-If you *want* the native Postgres vector extension on your database (e.g. for your
-own queries), install it once:
+## 3. `pgvector` — native Postgres ANN
 
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
+This is the "real pgvector": vectors are stored in a `vector(D)` column, indexed
+with **HNSW**, and queried with the `<=>` distance operator so Postgres does the
+work against the index.
+
+### Prerequisites
+
+- **Postgres** (not MySQL/SQLite).
+- The **`vector` extension** must be installable. Managed Postgres (Neon,
+  Supabase, RDS, Cloud SQL) all support it. The engine runs
+  `CREATE EXTENSION IF NOT EXISTS vector` for you on first use, so the DB user
+  needs permission to create it (or have it pre-created by an admin).
+
+::: callout warning "One embedding dimension per store"
+A `vector(D)` column has a **fixed dimension**. Set `dimensions` to match your
+embedding model (e.g. 1536 for `text-embedding-3-small`, 1024 for `mistral-embed`).
+The store refuses an index with a mismatched dimension — a deliberate guard. If
+you genuinely need multiple dimensions at once, use the `database` driver or
+Qdrant.
+:::
+
+### Setup
+
+**Step 1 — a Postgres connection** in `config/database.php`:
+
+```php
+'pgsql' => [
+    'driver'   => 'pgsql',
+    'host'     => env('DB_PG_HOST', '127.0.0.1'),
+    'port'     => env('DB_PG_PORT', '5432'),
+    'database' => env('DB_PG_DATABASE', 'rag'),
+    'username' => env('DB_PG_USERNAME', 'postgres'),
+    'password' => env('DB_PG_PASSWORD', ''),
+    'charset'  => 'utf8',
+    'prefix'   => '',
+    'search_path' => 'public',
+    'sslmode'  => 'prefer',
+],
 ```
 
-Managed Postgres (Neon, Supabase, RDS, Cloud SQL) all support enabling it from
-their dashboard. Note: the engine doesn't *require* the extension today (it scans
-in PHP), so this is optional until native ANN ships.
+**Step 2 — point the package at it** in `.env`:
+
+```dotenv
+RAG_VECTOR_STORE=pgvector
+RAG_PGVECTOR_CONNECTION=pgsql          # the connection name above
+RAG_PGVECTOR_DIMENSIONS=1536           # MUST match your embedding model
+# RAG_PGVECTOR_INDEX=hnsw              # hnsw (default) | ivfflat
+```
+
+**Step 3 — index.** On the first write the engine creates the extension, the
+`rag_pgvectors` table and the HNSW index automatically. There's no separate
+migration to run.
+
+```php
+// config/rag-engine.php
+'pgvector' => [
+    'driver'      => 'pgvector',
+    'connection'  => env('RAG_PGVECTOR_CONNECTION'),
+    'table'       => env('RAG_PGVECTOR_TABLE', 'rag_pgvectors'),
+    'dimensions'  => env('RAG_PGVECTOR_DIMENSIONS', 1536),
+    'index'       => env('RAG_PGVECTOR_INDEX', 'hnsw'),
+],
+```
+
+::: callout tip "Which to pick on Postgres — database or pgvector?"
+Start with **`database`** if your corpus is small and you want zero setup. Move
+to **`pgvector`** when you have lots of vectors and want index-backed ANN, and
+your deployment uses a single embedding model (one dimension).
+:::
 
 ---
 
-## 3. `qdrant` — a dedicated vector database
+## 4. `qdrant` — a dedicated vector database
 
-[Qdrant](https://qdrant.tech) is a purpose-built vector database with fast
-approximate-nearest-neighbour (ANN) search. Use it when your corpus is large or
-search latency matters. It's open-source and EU self-hostable.
+[Qdrant](https://qdrant.tech) is a purpose-built vector database with fast ANN
+search. Use it for large corpora or when you don't want vectors in your SQL
+database. Open-source and EU self-hostable.
 
 **Step 1 — run Qdrant** (Docker is easiest):
 
@@ -195,47 +208,41 @@ RAG_QDRANT_API_KEY=                 # set this if your Qdrant requires auth
 # RAG_QDRANT_QUANTIZATION=scalar    # optional: scalar | binary (cuts memory/cost)
 ```
 
-### The config block
-
 ```php
-'vector_stores' => [
-    'qdrant' => [
-        'driver'        => 'qdrant',
-        'host'          => env('RAG_QDRANT_HOST', 'http://localhost:6333'),
-        'api_key'       => env('RAG_QDRANT_API_KEY'),
-        'quantization'  => env('RAG_QDRANT_QUANTIZATION'), // scalar | binary | null
-    ],
+'qdrant' => [
+    'driver'        => 'qdrant',
+    'host'          => env('RAG_QDRANT_HOST', 'http://localhost:6333'),
+    'api_key'       => env('RAG_QDRANT_API_KEY'),
+    'quantization'  => env('RAG_QDRANT_QUANTIZATION'), // scalar | binary | null
 ],
 ```
 
 ::: callout tip "Quantization = cheaper memory"
-`quantization` compresses stored vectors inside Qdrant. `scalar` (int8) cuts
-memory ~4× with minimal accuracy loss; `binary` is the most aggressive. Leave it
-unset for full precision. It's applied when a collection is first created, so set
-it before indexing.
+`scalar` (int8) cuts memory ~4× with minimal accuracy loss; `binary` is most
+aggressive. Leave unset for full precision. Applied when a collection is first
+created, so set it before indexing.
 :::
 
-The engine creates one Qdrant **collection per tenant namespace** automatically;
-you don't pre-create anything.
+The engine creates one Qdrant **collection per tenant namespace** automatically.
 
 ---
 
 ## Migrating between backends
 
-Vectors are tied to the embedding model that produced them and to the store
-they live in — they don't transfer automatically. To switch backend (or
-embedding model), **re-index your corpus** into the new store:
+Vectors are tied to the embedding model that produced them and to the store they
+live in — they don't transfer automatically. To switch backend (or embedding
+model), **re-index your corpus**:
 
-1. Change `RAG_VECTOR_STORE` (and any backend env vars).
-2. Re-run processing for your documents (`Rag::process()` /
-   `ProcessDocumentJob`), or re-save your embeddable models.
+1. Change `RAG_VECTOR_STORE` (and the backend's env vars).
+2. Re-run processing (`Rag::process()` / `ProcessDocumentJob`), or re-save your
+   embeddable models.
 
 ## Best practices
 
-- **Dev/tests: `memory`. Small/medium prod: `pgvector`. Large prod: `qdrant`.**
-- **Keep vectors near your app** for `pgvector` — a slow DB connection slows
-  every search.
-- **Run `php artisan migrate --database=<conn>`** whenever `pgvector` points at a
+- **Dev/tests: `memory`. Small/medium prod: `database`. Postgres at scale:
+  `pgvector`. Large/any-stack: `qdrant`.**
+- **`pgvector`: set `dimensions` to your embedding model's size** before indexing.
+- **Run `php artisan migrate --database=<conn>`** when `database` points at a
   non-default connection.
 - **Set Qdrant `quantization`** before the first index if memory/cost matters.
 - **Re-index after changing backend or embedding model** — vectors aren't
@@ -244,10 +251,12 @@ embedding model), **re-index your corpus** into the new store:
 ## Common pitfalls
 
 ::: callout warning
-- **`pgvector` + a custom connection but "table not found"** → you didn't run the
-  migrations on that connection (`php artisan migrate --database=pgsql`).
-- **`RAG_VECTOR_STORE=database`** → there is no `database` driver; the SQL store
-  is named **`pgvector`**.
+- **`pgvector` but "could not create extension"** → the DB user lacks rights;
+  have an admin run `CREATE EXTENSION vector;` once, or use a superuser.
+- **`pgvector` dimension error** → `RAG_PGVECTOR_DIMENSIONS` doesn't match your
+  embedder. Set it to the model's output size and re-index.
+- **`database` + a custom connection but "table not found"** → run the migrations
+  on that connection (`php artisan migrate --database=...`).
 - **Switched store and search is empty** → you must re-index; vectors don't move
   between stores.
 - **Qdrant search fails** → check `RAG_QDRANT_HOST` is reachable and the API key

@@ -157,12 +157,27 @@ return [
             'api_key' => env('RAG_QDRANT_API_KEY'),
             'quantization' => env('RAG_QDRANT_QUANTIZATION'), // scalar|binary|null
         ],
-        // SQL-backed store for small/on-prem tenants (FR-VS-02). Works on any
-        // connection; brute-force scan (native pgvector ANN is a future option).
+        // Portable SQL store (FR-VS-02). Works on ANY connection (Postgres,
+        // MySQL, SQLite); scores with a brute-force scan in PHP. Best for
+        // small/medium corpora. Uses the `rag_vectors` tables from the package
+        // migration.
+        'database' => [
+            'driver' => 'database',
+            'connection' => env('RAG_DB_VECTOR_CONNECTION'), // null = app default
+            'table' => 'rag_vectors',
+        ],
+
+        // Native pgvector store: real ANN inside Postgres (vector column + HNSW
+        // index + `<=>` operators). Requires Postgres with the `vector`
+        // extension. Assumes a SINGLE embedding dimension (one model per app) —
+        // set `dimensions` to your embedder's size. The table/index/extension
+        // are created automatically on first use.
         'pgvector' => [
             'driver' => 'pgvector',
-            'connection' => env('RAG_PGVECTOR_CONNECTION'), // null = app default
-            'table' => 'rag_vectors',
+            'connection' => env('RAG_PGVECTOR_CONNECTION'), // a Postgres connection from config/database.php
+            'table' => env('RAG_PGVECTOR_TABLE', 'rag_pgvectors'),
+            'dimensions' => env('RAG_PGVECTOR_DIMENSIONS', 1536),
+            'index' => env('RAG_PGVECTOR_INDEX', 'hnsw'), // hnsw | ivfflat
         ],
     ],
 

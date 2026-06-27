@@ -25,7 +25,7 @@ it('persists and ranks vectors by cosine similarity (FR-VS-02)', function () {
     expect($hits[0]->id)->toBe('near')
         ->and($hits[0]->score)->toBeGreaterThan($hits[1]->score)
         ->and($this->store->count('docs'))->toBe(2)
-        ->and($this->store->name())->toBe('pgvector');
+        ->and($this->store->name())->toBe('database');
 });
 
 it('upserts idempotently and enforces dimensions', function () {
@@ -79,7 +79,7 @@ it('rejects a dimension change on a populated namespace and applies score thresh
 });
 
 it('resolves through the manager and is fully searchable end to end', function () {
-    config()->set('rag-engine.defaults.vector_store', 'pgvector');
+    config()->set('rag-engine.defaults.vector_store', 'database');
 
     expect(app(VectorStoreManager::class)->driver())->toBeInstanceOf(DatabaseVectorStore::class);
 });
