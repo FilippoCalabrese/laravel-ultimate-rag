@@ -6,6 +6,9 @@
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)]()
 [![Laravel](https://img.shields.io/badge/Laravel-11%20|%2012%20|%2013-ff2d20)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
+[![Docs](https://img.shields.io/badge/docs-laravel--rag--engine.selli.io-2563eb)](https://laravel-rag-engine.selli.io)
+
+📖 **Full documentation: [laravel-rag-engine.selli.io](https://laravel-rag-engine.selli.io)**
 
 Add **semantic search and AI answers over your own content** to any Laravel app.
 RAG Engine owns the whole Retrieval-Augmented Generation pipeline — ingesting
@@ -244,7 +247,9 @@ See [docs/concepts/security.md](docs/concepts/security.md) and
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/) and is built into a static site with
+The full documentation is hosted at
+**[laravel-rag-engine.selli.io](https://laravel-rag-engine.selli.io)**. The
+sources live in [`docs/`](docs/) and are built into a static site with
 [docmd](https://docmd.io):
 
 ```bash
@@ -255,11 +260,11 @@ npm run docs:build   # static site into ./site
 
 **Start here:**
 
-- 🧠 [What is RAG?](docs/getting-started/what-is-rag.md) — concepts + glossary, from zero.
-- 🚀 [Quickstart](docs/getting-started/quickstart.md) — a complete worked example.
-- 🏗️ [Architecture](docs/concepts/architecture.md) — how the pieces fit together.
-- 📥 [Ingesting content](docs/guides/ingestion.md) · 🔎 [Retrieval & search](docs/concepts/retrieval.md) · 💬 [Generation](docs/concepts/generation.md)
-- 🧩 [Contracts reference](docs/reference/contracts.md) · 🛠️ [Custom drivers](docs/guides/custom-drivers.md)
+- 🧠 [What is RAG?](https://laravel-rag-engine.selli.io/getting-started/what-is-rag) — concepts + glossary, from zero.
+- 🚀 [Quickstart](https://laravel-rag-engine.selli.io/getting-started/quickstart) — a complete worked example.
+- 🏗️ [Architecture](https://laravel-rag-engine.selli.io/concepts/architecture) — how the pieces fit together.
+- 📥 [Ingesting content](https://laravel-rag-engine.selli.io/guides/ingestion) · 🔎 [Retrieval & search](https://laravel-rag-engine.selli.io/concepts/retrieval) · 💬 [Generation](https://laravel-rag-engine.selli.io/concepts/generation)
+- 🧩 [Contracts reference](https://laravel-rag-engine.selli.io/reference/contracts) · 🛠️ [Custom drivers](https://laravel-rag-engine.selli.io/guides/custom-drivers)
 
 ## Testing & development
 

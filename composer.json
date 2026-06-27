@@ -20,6 +20,11 @@
             "role": "Developer"
         }
     ],
+    "support": {
+        "docs": "https://laravel-rag-engine.selli.io",
+        "issues": "https://github.com/sellinnate/rag-engine/issues",
+        "source": "https://github.com/sellinnate/rag-engine"
+    },
     "require": {
         "php": "^8.2",
         "spatie/laravel-package-tools": "^1.16",
