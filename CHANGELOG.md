@@ -2,6 +2,31 @@
 
 All notable changes to `:package_name` will be documented in this file.
 
+## v1.2.0 — retries, AWS KMS, evaluation harness, PDF OCR - 2026-06-27
+
+Production-readiness features from the package review. Backward compatible.
+
+### New
+
+- **Resilient providers** — LLM and reranker HTTP calls now retry transient failures (429/5xx/connection) with exponential backoff + jitter, failing fast on 4xx. Tune with `retries` / `max_attempts`.
+- **AWS KMS driver** (`RAG_KMS=aws`) — production BYOK with **one CMK per tenant** (alias-based), so crypto-shredding one tenant never affects another. Needs `aws/aws-sdk-php`.
+- **RAG evaluation harness** — measure **recall@k, precision@k, hit-rate and MRR** over a labelled dataset, in code (`Evaluator`) or via **`php artisan rag:evaluate dataset.json`**. Tune chunking/embedders/retrieval with numbers.
+- **OCR for scanned PDFs** (`RAG_OCR=tesseract`) — when a PDF has no text layer, the parser falls back to OCR. Pluggable `Ocr` contract; off by default.
+
+### Repo
+
+- Added `SECURITY.md` (responsible-disclosure policy) and `CONTRIBUTING.md`.
+
+### Docs
+
+New **[Evaluating quality](https://laravel-rag-engine.selli.io/guides/evaluation)** guide; retry, OCR (parsing) and AWS KMS (security) sections; README, `.env.example` and config updated.
+
+### Quality
+
+429 tests (incl. retry, AWS KMS via mock handler, evaluation, OCR fallback) + a native-pgvector CI integration job, PHPStan level 8, Pint, coverage ≥90%, green across Linux + Windows × PHP 8.3/8.4/8.5 × Laravel 12/13.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
 ## v1.1.1 — fix PHPStan CI (console input typing) - 2026-06-27
 
 Patch release. No runtime or behaviour change.
@@ -35,6 +60,7 @@ public function toEmbeddable(): EmbeddableDefinition
         ->add('Title', $this->title)
         ->addFile('Document', $this->document_path, 's3'); // PDF/DOCX on a disk
 }
+
 
 
 ```
@@ -77,6 +103,7 @@ PHP 8.2+ · Laravel 11, 12 or 13.
 
 ```bash
 composer require sellinnate/rag-engine
+
 
 
 
