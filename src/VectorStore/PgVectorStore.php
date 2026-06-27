@@ -23,6 +23,13 @@ use Sellinnate\RagEngine\Support\MetadataMatcher;
  * Single fixed embedding dimension per store (one embedding model per
  * deployment): mixed dimensions need separate stores, the portable `database`
  * driver, or Qdrant.
+ *
+ * Coverage note: this driver needs a real Postgres with the `vector` extension,
+ * so it cannot run in the default SQLite test/coverage run. It is fully
+ * integration-tested in CI (the dedicated "pgvector" job boots a pgvector
+ * service); hence it is excluded from the line-coverage metric here.
+ *
+ * @codeCoverageIgnore
  */
 final class PgVectorStore implements VectorStore
 {
