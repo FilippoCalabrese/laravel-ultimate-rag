@@ -1,69 +1,280 @@
 # RAG Engine for Laravel
 
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-377%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)]()
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-blue)]()
+[![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)]()
+[![Laravel](https://img.shields.io/badge/Laravel-11%20|%2012%20|%2013-ff2d20)]()
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 
-Enterprise **Retrieval-Augmented Generation** engine for Laravel: ingestion,
-parsing, chunking, embedding, vector search, reranking, BYOK security and
-multi-tenancy — all behind stable contracts.
+Add **semantic search and AI answers over your own content** to any Laravel app.
+RAG Engine owns the whole Retrieval-Augmented Generation pipeline — ingesting
+documents, splitting them, turning them into searchable vectors, and retrieving
+the most relevant passages for any query. Writing a final answer with an LLM is
+an optional layer on top.
 
-> Infrastructure, not a feature. The engine owns the whole pipeline from
-> *ingestion → retrieval*. Generation is an optional, decoupled layer.
+> **Infrastructure, not a feature.** The engine owns *ingestion → retrieval*;
+> generation is optional and decoupled. Vertical packages, internal agents and
+> search modules build on top without re-implementing ingestion, chunking,
+> embedding or retrieval.
 
-## Principles
+### What you can build
 
-- **Domain-agnostic** generic primitives (documents, chunks, queries, results).
-- **Contract-first** — every replaceable component sits behind an interface.
-- **Async-first** ingestion; synchronous, low-latency retrieval.
-- **Multi-tenant & secure by design** — per-tenant isolation and BYOK envelope encryption.
-- **EU-resident by default** for data and embeddings.
+- 🔎 **Semantic search** — a search box that matches by *meaning*, not keywords.
+- 🤖 **AI Q&A / chatbots** — LLM answers grounded in *your* content, with citations.
+- 📚 **"Ask your docs / tickets / wiki"** features inside an existing app.
+- 🧭 **Similarity / recommendations** — "find records like this one".
 
-## Install
+Use just the search half (no LLM, no AI bill) or add generation later — same
+code, one config switch.
+
+## Table of contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Indexing Eloquent models](#indexing-eloquent-models)
+- [Configuration](#configuration)
+- [Supported drivers](#supported-drivers)
+- [Security & multi-tenancy](#security--multi-tenancy)
+- [Documentation](#documentation)
+- [Testing & development](#testing--development)
+- [License](#license)
+
+## Features
+
+- **Multi-format ingestion** — raw text, file uploads, URLs (SSRF-guarded), cloud
+  storage and Eloquent records. Safely parses Markdown, HTML, XML, CSV, JSON,
+  DOCX and PDF.
+- **Pluggable everything** — parsing, chunking, embedding, vector store,
+  reranking and LLM are swappable drivers behind stable contracts.
+- **10 embedding providers** — OpenAI, Azure OpenAI, Mistral, Jina, Voyage,
+  Cohere, Gemini, Hugging Face, Ollama, plus a deterministic `fake` driver for
+  tests.
+- **Powerful retrieval** — metadata filters, hybrid (semantic + keyword) search
+  with RRF, MMR diversification, reranking, relevance thresholds and
+  small-to-big (parent-child) context expansion.
+- **Embeddable Eloquent models** — make any model searchable via one contract;
+  recursive composition of relations, auto-sync on change, and vector→model
+  trace-back.
+- **Security by design** — BYOK envelope encryption, a KMS abstraction,
+  crypto-shredding for "right to erasure", and PII redaction on by default.
+- **Multi-tenancy** — automatic, fail-closed per-tenant scoping of every query.
+- **Operations from day one** — immutable (WORM) audit log, cost tracking,
+  lifecycle events, queued/batchable ingestion and Artisan commands.
+- **EU-resident by default** — content and embeddings stay in the EU unless you
+  explicitly opt into a non-EU provider.
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| PHP | **8.2+** |
+| Laravel | **11, 12 or 13** |
+| A database | any Laravel-supported (SQLite is fine to start) |
+
+A dedicated vector database is **not** required to begin: the default store is
+in-memory, and `pgvector` works on plain Postgres/MySQL/SQLite. Reach for Qdrant
+only at larger scale.
+
+## Installation
 
 ```bash
 composer require sellinnate/rag-engine
+
 php artisan vendor:publish --tag="rag-engine-config"
 php artisan vendor:publish --tag="rag-engine-migrations"
 php artisan migrate
 ```
+
+The service provider and `Rag` facade auto-register via package discovery. Out of
+the box the package uses zero-network, deterministic drivers (`fake` embedder,
+in-memory store, local KMS) so your test suite runs offline.
+
+> [!IMPORTANT]
+> The `fake` embedder is for **tests only** — it doesn't understand meaning. For
+> a real search feature, configure a real embedder (see
+> [Configuration](#configuration)).
 
 ## Quick start
 
 ```php
 use Sellinnate\RagEngine\Facades\Rag;
 
-// BYOK envelope encryption
-$payload = Rag::encrypter()->encrypt('confidential text', 'tenant-42');
-$plain   = Rag::encrypter()->decrypt($payload);
+// 1. INGEST — register content as a Document (stored & encrypted, not yet searchable).
+$document = Rag::ingest(
+    Rag::source()->text('Refunds are issued within 14 business days of an approved request.')
+);
 
-// Crypto-shredding (GDPR right to erasure)
-Rag::kms()->destroyKey('tenant-42');
+// 2. PROCESS — run the pipeline: parse → clean & redact PII → chunk → embed → store.
+Rag::process($document);            // or: ProcessDocumentJob::dispatch(...) on a queue
 
-// Tenant-scoped work
-Rag::forTenant('tenant-7', fn () => /* ... */);
+// 3. SEARCH — find the most relevant chunks by meaning.
+$hits = Rag::search('how long until I get my money back?')->topK(3)->get();
+
+$hits[0]->content;                  // "Refunds are issued within 14 business days..."
+$hits[0]->score;                    // relevance score
+$hits[0]->metadata['source_ref'];   // provenance: where it came from
+
+// 4. (OPTIONAL) ASK — let an LLM write a cited answer from the retrieved chunks.
+$answer = Rag::ask('how long do refunds take?')->using('openai')->generate();
+$answer->answer;                    // "Refunds take 14 business days. [1]"
+$answer->citations;                 // [['index' => 1, 'document_id' => '…', 'chunk_id' => '…']]
 ```
+
+Refine retrieval fluently:
+
+```php
+$hits = Rag::search('envelope encryption')
+    ->topK(5)
+    ->threshold(0.4)        // drop weak matches
+    ->where('tag', 'docs')  // metadata filter
+    ->hybrid()              // semantic + keyword (RRF)
+    ->rerank()              // precision pass
+    ->expandParents()       // small-to-big context
+    ->get();
+```
+
+## Indexing Eloquent models
+
+If the content you want to search already lives in your database, make the model
+embeddable — it then stays in sync automatically as rows change, and every vector
+traces back to its model.
+
+```php
+use Sellinnate\RagEngine\Concerns\HasEmbeddings;
+use Sellinnate\RagEngine\Contracts\Embeddable;
+use Sellinnate\RagEngine\Eloquent\EmbeddableDefinition;
+
+class Article extends Model implements Embeddable
+{
+    use HasEmbeddings; // auto-indexes on save, removes on delete
+
+    public function toEmbeddable(): EmbeddableDefinition
+    {
+        return EmbeddableDefinition::make()
+            ->add('Title', $this->title)
+            ->add('Body', $this->body)
+            ->include($this->author, 'author')          // compose a related model
+            ->includeMany($this->comments, 'comments');  // recursively
+    }
+}
+
+// Trace a search hit back to its model:
+$article = Rag::models()->resolve($hits[0]); // App\Models\Article instance, or null
+```
+
+See **[docs/concepts/eloquent-models.md](docs/concepts/eloquent-models.md)**.
+
+## Configuration
+
+Configuration lives in `config/rag-engine.php` and works like Laravel's
+`config/database.php`: you define named *connections* per subsystem and pick a
+`default`. Switching provider = changing one name in `.env`.
+
+```dotenv
+# .env — switch to a real embedder (Ollama is free & local)
+RAG_EMBEDDER=ollama
+RAG_OLLAMA_BASE_URL=http://localhost:11434
+
+# ...or a hosted provider:
+RAG_EMBEDDER=openai
+RAG_OPENAI_API_KEY=sk-...
+```
+
+> [!NOTE]
+> **API keys go in `.env`, never in the committed config.** A copy-ready list of
+> every variable ships as [`.env.example`](.env.example). See
+> [docs/getting-started/configuration.md](docs/getting-started/configuration.md).
+
+## Supported drivers
+
+**Embedders** (`RAG_EMBEDDER`)
+
+| Driver | Provider | Residency |
+|---|---|---|
+| `openai` | OpenAI | global |
+| `azure-openai` | Azure OpenAI | EU (EU region) |
+| `mistral` | Mistral | EU |
+| `jina` | Jina AI | EU |
+| `voyage` | Voyage AI | global |
+| `cohere` | Cohere | global |
+| `gemini` | Google Gemini | global |
+| `huggingface` | Hugging Face / self-hosted TEI | global / self-host |
+| `ollama` | Ollama (BGE/E5/Nomic) | self-hosted |
+| `fake` | deterministic (tests) | local |
+
+**Vector stores** (`RAG_VECTOR_STORE`): `memory` (tests/dev) · `pgvector`
+(Postgres/MySQL/SQLite) · `qdrant` (EU self-hostable, ANN at scale).
+
+**Parsers**: plain text · Markdown · HTML · XML · CSV/TSV · JSON · DOCX · PDF.
+
+**Chunkers**: `recursive` (default) · `sentence` · `markdown` · `fixed`
+(char- or token-based), with optional parent-child and contextual headers.
+
+All drivers share one contract — switching backends needs no code changes, and
+you can register your own (see
+[docs/guides/custom-drivers.md](docs/guides/custom-drivers.md)).
+
+## Security & multi-tenancy
+
+- **BYOK envelope encryption** — content is encrypted at rest with per-item DEKs
+  wrapped by a tenant KEK in a KMS; the plaintext key never persists.
+- **Crypto-shredding** — honour "right to erasure" by destroying the key, making
+  data unrecoverable everywhere (including DB backups) at once.
+- **PII redaction** — emails, cards (Luhn), IBANs (mod-97), Italian fiscal codes
+  and phone numbers are redacted before indexing, by default.
+- **Fail-closed multi-tenancy** — every query is automatically scoped to the
+  current tenant; scope can never be widened from a query (a tested invariant).
+- **Tamper-evident audit log** — append-only with database-level WORM triggers.
+
+```php
+use Sellinnate\RagEngine\Facades\Rag;
+
+// Run work scoped to a tenant (previous tenant restored afterwards):
+Rag::forTenant('tenant-7', fn () => Rag::search('q')->get());
+
+// Right to erasure — crypto-shred a tenant:
+Rag::kms()->destroyKey('tenant-7');
+```
+
+See [docs/concepts/security.md](docs/concepts/security.md) and
+[docs/concepts/multi-tenancy.md](docs/concepts/multi-tenancy.md).
 
 ## Documentation
 
-Full docs are built with [docmd](https://docmd.io) from `docs/` into `site/`:
+Full documentation lives in [`docs/`](docs/) and is built into a static site with
+[docmd](https://docmd.io):
 
 ```bash
-npx docmd dev    # local preview
-npx docmd build  # static site into site/
+npm install
+npm run docs:dev     # local preview
+npm run docs:build   # static site into ./site
 ```
 
-## Development
+**Start here:**
+
+- 🧠 [What is RAG?](docs/getting-started/what-is-rag.md) — concepts + glossary, from zero.
+- 🚀 [Quickstart](docs/getting-started/quickstart.md) — a complete worked example.
+- 🏗️ [Architecture](docs/concepts/architecture.md) — how the pieces fit together.
+- 📥 [Ingesting content](docs/guides/ingestion.md) · 🔎 [Retrieval & search](docs/concepts/retrieval.md) · 💬 [Generation](docs/concepts/generation.md)
+- 🧩 [Contracts reference](docs/reference/contracts.md) · 🛠️ [Custom drivers](docs/guides/custom-drivers.md)
+
+## Testing & development
 
 ```bash
-composer test                                    # run the suite
-vendor/bin/phpstan analyse                        # static analysis (level 8)
-vendor/bin/pint                                   # code style
+composer test         # run the Pest suite (377 tests)
+composer analyse      # PHPStan, level 8
+composer format       # Laravel Pint (code style)
 
-# Coverage (requires a coverage driver, e.g. Xdebug/PCOV):
+# Coverage (needs a coverage driver, e.g. Xdebug/PCOV):
 XDEBUG_MODE=coverage vendor/bin/pest --coverage --min=90
 ```
 
+Quality gates kept green on every change: **377 tests**, **PHPStan level 8**,
+**Pint** clean, **≥90% coverage**.
+
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md).
+MIT — see [LICENSE.md](LICENSE.md).
