@@ -43,6 +43,12 @@ final class SearchBuilder
 
     private ?string $store = null;
 
+    private bool $expandQueries = false;
+
+    private int $queryVariations = 3;
+
+    private ?string $llm = null;
+
     public function __construct(
         private readonly Retriever $retriever,
         private readonly string $text,
@@ -151,6 +157,21 @@ final class SearchBuilder
         return $this;
     }
 
+    /**
+     * Expand the query into several LLM-generated phrasings, retrieve each and
+     * fuse the results (multi-query retrieval, FR-QT-01). Improves recall on
+     * differently-worded questions. Requires a configured LLM; with the `null`
+     * LLM it gracefully no-ops (runs the original query only).
+     */
+    public function expandQueries(int $variations = 3, ?string $llm = null): self
+    {
+        $this->expandQueries = true;
+        $this->queryVariations = max(1, $variations);
+        $this->llm = $llm;
+
+        return $this;
+    }
+
     public function toRequest(): SearchRequest
     {
         return new SearchRequest(
@@ -170,6 +191,9 @@ final class SearchBuilder
             fetchK: $this->fetchK,
             embedder: $this->embedder,
             store: $this->store,
+            expandQueries: $this->expandQueries,
+            queryVariations: $this->queryVariations,
+            llm: $this->llm,
         );
     }
 

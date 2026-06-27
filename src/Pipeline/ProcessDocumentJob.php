@@ -40,7 +40,9 @@ final class ProcessDocumentJob implements ShouldQueue
         public readonly string $documentId,
         public readonly string $tenantId,
         public readonly array $options = [],
-    ) {}
+    ) {
+        $this->onQueue((string) config('rag-engine.ingestion.queue', 'default'));
+    }
 
     public function handle(IngestionPipeline $pipeline, TenantContext $tenant): void
     {

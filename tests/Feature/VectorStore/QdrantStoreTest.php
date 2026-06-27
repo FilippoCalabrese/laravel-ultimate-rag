@@ -36,6 +36,32 @@ it('rejects an unsupported metric', function () {
     $store->createNamespace('docs', 8, 'manhattan');
 })->throws(RagException::class, 'metric');
 
+it('sends quantization_config when configured', function () {
+    Http::fake([
+        '*/collections/docs' => Http::sequence()
+            ->push('', 404)
+            ->push(['result' => true], 200),
+    ]);
+
+    (new QdrantStore(app(HttpFactory::class), 'http://localhost:6333', 'secret', 'cosine', 'scalar'))
+        ->createNamespace('docs', 8, 'cosine');
+
+    Http::assertSent(fn ($request) => $request->method() === 'PUT'
+        && ($request['quantization_config']['scalar']['type'] ?? null) === 'int8');
+});
+
+it('omits quantization_config by default (full precision)', function () {
+    Http::fake([
+        '*/collections/docs' => Http::sequence()
+            ->push('', 404)
+            ->push(['result' => true], 200),
+    ]);
+
+    qdrant()->createNamespace('docs', 8, 'cosine');
+
+    Http::assertSent(fn ($request) => $request->method() === 'PUT' && ! isset($request['quantization_config']));
+});
+
 it('upserts points', function () {
     Http::fake(['*/points*' => Http::response(['result' => ['status' => 'completed']])]);
 

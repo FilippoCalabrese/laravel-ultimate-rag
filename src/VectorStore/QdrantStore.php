@@ -28,6 +28,7 @@ final class QdrantStore implements VectorStore
         private readonly string $host,
         private readonly ?string $apiKey = null,
         private readonly string $defaultMetric = 'cosine',
+        private readonly ?string $quantization = null,
     ) {}
 
     public function createNamespace(string $namespace, int $dimensions, string $metric = 'cosine'): void
@@ -42,9 +43,31 @@ final class QdrantStore implements VectorStore
             return;
         }
 
-        $this->request()->put("/collections/{$this->ns($namespace)}", [
+        $body = [
             'vectors' => ['size' => $dimensions, 'distance' => self::METRICS[$metric]],
-        ])->throw();
+        ];
+
+        $quantizationConfig = $this->quantizationConfig();
+        if ($quantizationConfig !== null) {
+            $body['quantization_config'] = $quantizationConfig;
+        }
+
+        $this->request()->put("/collections/{$this->ns($namespace)}", $body)->throw();
+    }
+
+    /**
+     * Translate the configured shorthand into Qdrant's quantization_config, which
+     * compresses stored vectors to cut memory/cost. `null` keeps full precision.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function quantizationConfig(): ?array
+    {
+        return match ($this->quantization) {
+            'scalar' => ['scalar' => ['type' => 'int8', 'always_ram' => true]],
+            'binary' => ['binary' => ['always_ram' => true]],
+            default => null,
+        };
     }
 
     public function namespaceExists(string $namespace): bool

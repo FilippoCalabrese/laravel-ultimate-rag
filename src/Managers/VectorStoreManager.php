@@ -46,6 +46,7 @@ final class VectorStoreManager extends DriverManager
             host: (string) ($config['host'] ?? 'http://localhost:6333'),
             apiKey: $config['api_key'] ?? null,
             defaultMetric: (string) $this->app->make('config')->get('rag-engine.defaults.distance_metric', 'cosine'),
+            quantization: isset($config['quantization']) && is_string($config['quantization']) ? $config['quantization'] : null,
         );
     }
 

@@ -40,7 +40,9 @@ final class SyncModelEmbeddingJob implements ShouldQueue
         public readonly string $id,
         public readonly string $tenantId,
         public readonly bool $forget = false,
-    ) {}
+    ) {
+        $this->onQueue((string) config('rag-engine.ingestion.queue', 'default'));
+    }
 
     public function handle(ModelEmbedder $embedder, TenantContext $tenant): void
     {

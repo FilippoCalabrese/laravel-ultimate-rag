@@ -174,6 +174,22 @@ return [
     'rerankers' => [
         'null' => ['driver' => 'null'],
         'fake' => ['driver' => 'fake'],
+
+        // Cohere Rerank cross-encoder.
+        'cohere' => [
+            'driver' => 'cohere',
+            'api_key' => env('RAG_COHERE_RERANK_API_KEY', env('RAG_COHERE_API_KEY')),
+            'model' => env('RAG_COHERE_RERANK_MODEL', 'rerank-v3.5'),
+            'base_url' => env('RAG_COHERE_RERANK_BASE_URL', 'https://api.cohere.com'),
+        ],
+
+        // Jina reranker cross-encoder (EU).
+        'jina' => [
+            'driver' => 'jina',
+            'api_key' => env('RAG_JINA_RERANK_API_KEY', env('RAG_JINA_API_KEY')),
+            'model' => env('RAG_JINA_RERANK_MODEL', 'jina-reranker-v2-base-multilingual'),
+            'base_url' => env('RAG_JINA_RERANK_BASE_URL', 'https://api.jina.ai'),
+        ],
     ],
 
     /*
@@ -272,7 +288,10 @@ return [
     |--------------------------------------------------------------------------
     */
     'tenancy' => [
-        // namespace | schema | database
+        // Tenant data isolation strategy. Only 'namespace' (a dedicated vector
+        // namespace per tenant) is implemented today; setting anything else
+        // fails fast at boot. 'schema'/'database' are reserved for a future
+        // release rather than silently behaving like 'namespace'.
         'isolation' => env('RAG_TENANCY_ISOLATION', 'namespace'),
         'default_tenant' => env('RAG_DEFAULT_TENANT', 'default'),
         // Strict mode: reading the tenant before one is explicitly set throws,
@@ -293,9 +312,11 @@ return [
     |--------------------------------------------------------------------------
     */
     'ingestion' => [
+        // Hard cap on a single source's size (bytes); 0 disables the check.
         'max_upload_bytes' => env('RAG_MAX_UPLOAD_BYTES', 50 * 1024 * 1024),
+        // Queue connection/name that ProcessDocumentJob and SyncModelEmbeddingJob
+        // are dispatched onto (so RAG indexing can run on a dedicated worker).
         'queue' => env('RAG_QUEUE', 'default'),
-        'sync' => env('RAG_INGESTION_SYNC', false),
     ],
 
     // Default vector-store namespace/collection (FR-VS-09). Used by indexing,
