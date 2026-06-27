@@ -125,6 +125,10 @@ Rag::search('q')->rerank('jina')->get();     // a specific one for this call
 Need a different provider? Implement the `Reranker` contract and register it —
 see **[Custom drivers](/guides/custom-drivers)**.
 
+Both reranker drivers retry transient failures (429/5xx/connection) with
+exponential backoff; tune with `retries` / `max_attempts` in the `rerankers`
+config.
+
 ## Indexing (so there's something to search)
 
 A document must be processed before it can be retrieved. Either use the high-level

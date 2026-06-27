@@ -84,8 +84,8 @@ it('a reranker raises a RagException on a provider error', function () {
 })->throws(RagException::class, 'cohere');
 
 it('RerankerManager resolves the cohere and jina drivers from config', function () {
-    config()->set('rag-engine.rerankers.cohere', ['driver' => 'cohere', 'api_key' => 'k']);
-    config()->set('rag-engine.rerankers.jina', ['driver' => 'jina', 'api_key' => 'k']);
+    config()->set('rag-engine.rerankers.cohere', ['driver' => 'cohere', 'api_key' => 'k', 'retries' => false]);
+    config()->set('rag-engine.rerankers.jina', ['driver' => 'jina', 'api_key' => 'k', 'retries' => false]);
 
     $manager = app(RerankerManager::class)->forgetDrivers();
 

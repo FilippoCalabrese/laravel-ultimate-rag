@@ -124,6 +124,14 @@ Rag::ask('summarise the refund policy')->using('openai')->generate();
 Any other LLM is a small driver away — implement the `Llm` contract and register
 it with `LlmManager::extend()`. See **[Custom drivers](/guides/custom-drivers)**.
 
+::: callout info "Automatic retries"
+Both shipped LLM drivers retry transient failures (HTTP 429 / 5xx / connection
+errors) with **exponential backoff + jitter**, and fail fast on non-retryable
+errors (401/400). Tune per connection with `retries` (set `false` to disable)
+and `max_attempts` (default 3) in the `llms` config. Streaming responses are not
+retried mid-stream.
+:::
+
 ## How the context is built
 
 Retrieved chunks are assembled into a **numbered, token-budgeted** context block

@@ -11,6 +11,7 @@ use Sellinnate\RagEngine\Audit\AuditLogger;
 use Sellinnate\RagEngine\Chunking\ChunkingService;
 use Sellinnate\RagEngine\Chunking\ContextualHeaderEnricher;
 use Sellinnate\RagEngine\Console\ClearCacheCommand;
+use Sellinnate\RagEngine\Console\EvaluateCommand;
 use Sellinnate\RagEngine\Console\PurgeCommand;
 use Sellinnate\RagEngine\Console\ReconcileCommand;
 use Sellinnate\RagEngine\Console\RotateKeysCommand;
@@ -19,6 +20,7 @@ use Sellinnate\RagEngine\Console\StatusCommand;
 use Sellinnate\RagEngine\Contracts\Embedder;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
 use Sellinnate\RagEngine\Contracts\Llm;
+use Sellinnate\RagEngine\Contracts\Ocr;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
@@ -36,6 +38,7 @@ use Sellinnate\RagEngine\Managers\ChunkerManager;
 use Sellinnate\RagEngine\Managers\EmbedderManager;
 use Sellinnate\RagEngine\Managers\KmsManager;
 use Sellinnate\RagEngine\Managers\LlmManager;
+use Sellinnate\RagEngine\Managers\OcrManager;
 use Sellinnate\RagEngine\Managers\RerankerManager;
 use Sellinnate\RagEngine\Managers\TokenizerManager;
 use Sellinnate\RagEngine\Managers\VectorStoreManager;
@@ -80,6 +83,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
                 PurgeCommand::class,
                 ReconcileCommand::class,
                 ClearCacheCommand::class,
+                EvaluateCommand::class,
             ]);
     }
 
@@ -145,6 +149,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
             KmsManager::class,
             TokenizerManager::class,
             LlmManager::class,
+            OcrManager::class,
         ] as $manager) {
             $this->app->singleton($manager, fn ($app) => new $manager($app));
         }
@@ -175,7 +180,7 @@ class RagEngineServiceProvider extends PackageServiceProvider
 
     private function registerParsing(): void
     {
-        $this->app->singleton(ParserManager::class, function (): ParserManager {
+        $this->app->singleton(ParserManager::class, function ($app): ParserManager {
             // Registered last-wins, so list specific parsers; PDF only if usable.
             $parsers = [
                 new PlainTextParser,
@@ -188,7 +193,10 @@ class RagEngineServiceProvider extends PackageServiceProvider
             ];
 
             if (PdfParser::isAvailable()) {
-                $parsers[] = new PdfParser;
+                $parsers[] = new PdfParser(
+                    $app->make(Ocr::class),
+                    (int) $app->make('config')->get('rag-engine.ocr_min_chars', 16),
+                );
             }
 
             return new ParserManager($parsers);
@@ -361,5 +369,6 @@ class RagEngineServiceProvider extends PackageServiceProvider
         $this->app->bind(KeyManagement::class, fn ($app) => $app->make(KmsManager::class)->driver());
         $this->app->bind(Tokenizer::class, fn ($app) => $app->make(TokenizerManager::class)->driver());
         $this->app->bind(Llm::class, fn ($app) => $app->make(LlmManager::class)->driver());
+        $this->app->bind(Ocr::class, fn ($app) => $app->make(OcrManager::class)->driver());
     }
 }

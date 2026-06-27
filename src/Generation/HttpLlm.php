@@ -7,7 +7,7 @@ namespace Sellinnate\RagEngine\Generation;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Sellinnate\RagEngine\Contracts\Llm;
-use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Exceptions\ProviderException;
 
 /**
  * Base class for HTTP-backed LLM drivers (FR-GE-02). Subclasses describe a
@@ -59,12 +59,7 @@ abstract class HttpLlm implements Llm
         $response = $this->request()->post($this->endpoint(), $this->payload($prompt));
 
         if ($response->failed()) {
-            throw new RagException(sprintf(
-                'LLM provider [%s] failed with status %d: %s',
-                $this->name(),
-                $response->status(),
-                mb_substr($response->body(), 0, 500),
-            ));
+            throw ProviderException::fromStatus($this->name(), $response->status(), $response->body());
         }
 
         return trim($this->extractText($response->json()));
@@ -77,11 +72,7 @@ abstract class HttpLlm implements Llm
             ->post($this->endpoint(), [...$this->payload($prompt), 'stream' => true]);
 
         if ($response->failed()) {
-            throw new RagException(sprintf(
-                'LLM provider [%s] streaming failed with status %d.',
-                $this->name(),
-                $response->status(),
-            ));
+            throw ProviderException::fromStatus($this->name(), $response->status());
         }
 
         $body = $response->toPsrResponse()->getBody();

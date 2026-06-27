@@ -4,7 +4,7 @@
 
 # RAG Engine for Laravel
 
-[![Tests](https://img.shields.io/badge/tests-410%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-429%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)]()
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-blue)]()
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)]()
@@ -66,8 +66,15 @@ code, one config switch.
 - **Embeddable Eloquent models** — make any model searchable via one contract;
   recursive composition of relations, auto-sync on change, and vector→model
   trace-back.
-- **Security by design** — BYOK envelope encryption, a KMS abstraction,
-  crypto-shredding for "right to erasure", and PII redaction on by default.
+- **Security by design** — BYOK envelope encryption with a KMS abstraction
+  (`local` + **AWS KMS**), crypto-shredding for "right to erasure", and PII
+  redaction on by default.
+- **OCR for scanned PDFs** — pluggable OCR (Tesseract) kicks in when a PDF has no
+  text layer.
+- **Quality evaluation** — measure recall@k, precision@k, hit-rate and MRR over a
+  labelled dataset (`rag:evaluate`).
+- **Resilient providers** — LLM, reranker and embedder HTTP calls retry transient
+  failures with exponential backoff.
 - **Multi-tenancy** — automatic, fail-closed per-tenant scoping of every query.
 - **Operations from day one** — immutable (WORM) audit log, cost tracking,
   lifecycle events, queued/batchable ingestion and Artisan commands.
@@ -268,7 +275,13 @@ Anthropic is generation-only (no embeddings). Answers can be **streamed** with
 **Rerankers** (`RAG_RERANKER`, optional cross-encoder pass): `cohere` · `jina`
 (EU) · `null`/`fake`.
 
-**Parsers**: plain text · Markdown · HTML · XML · CSV/TSV · JSON · DOCX · PDF.
+**KMS** (`RAG_KMS`, BYOK key management): `local` (dev) · `aws` (AWS KMS,
+production).
+
+**OCR** (`RAG_OCR`, scanned-PDF fallback): `null` · `tesseract`.
+
+**Parsers**: plain text · Markdown · HTML · XML · CSV/TSV · JSON · DOCX · PDF
+(+ OCR for scans).
 
 **Chunkers**: `recursive` (default) · `sentence` · `markdown` · `fixed`
 (char- or token-based), with optional parent-child and contextual headers.
@@ -322,12 +335,13 @@ npm run docs:build   # static site into ./site
 - 🏗️ [Architecture](https://laravel-rag-engine.selli.io/concepts/architecture) — how the pieces fit together.
 - 📥 [Ingesting content](https://laravel-rag-engine.selli.io/guides/ingestion) · 🔎 [Retrieval & search](https://laravel-rag-engine.selli.io/concepts/retrieval) · 💬 [Generation](https://laravel-rag-engine.selli.io/concepts/generation)
 - 🗄️ [Vector stores & configuration](https://laravel-rag-engine.selli.io/concepts/vector-stores) — incl. pgvector Postgres setup.
+- 📊 [Evaluating quality](https://laravel-rag-engine.selli.io/guides/evaluation) — recall@k, MRR, `rag:evaluate`.
 - 🧩 [Contracts reference](https://laravel-rag-engine.selli.io/reference/contracts) · 🛠️ [Custom drivers](https://laravel-rag-engine.selli.io/guides/custom-drivers)
 
 ## Testing & development
 
 ```bash
-composer test         # run the Pest suite (410 tests)
+composer test         # run the Pest suite (429 tests)
 composer analyse      # PHPStan, level 8
 composer format       # Laravel Pint (code style)
 
@@ -335,7 +349,7 @@ composer format       # Laravel Pint (code style)
 XDEBUG_MODE=coverage vendor/bin/pest --coverage --min=90
 ```
 
-Quality gates kept green on every change: **410 tests**, **PHPStan level 8**,
+Quality gates kept green on every change: **429 tests**, **PHPStan level 8**,
 **Pint** clean, **≥90% coverage**.
 
 ## License

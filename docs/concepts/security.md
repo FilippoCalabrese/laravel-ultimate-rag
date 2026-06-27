@@ -46,9 +46,13 @@ is discarded. Only the wrapped DEK is persisted.
 
 ## KMS abstraction
 
-The `KeyManagement` contract abstracts the KMS. The package ships a **local**
-driver for dev/test (deterministic, zero-network), and the contract is designed
-for AWS KMS, GCP KMS, Azure Key Vault and HashiCorp Vault drivers.
+The `KeyManagement` contract abstracts the KMS. The package ships:
+
+- a **`local`** driver for dev/test (deterministic, zero-network), and
+- a production **`aws`** driver (AWS KMS).
+
+GCP KMS, Azure Key Vault and HashiCorp Vault fit the same contract and can be
+added via `KmsManager::extend()`.
 
 ```php
 $kms = Rag::kms();
@@ -56,6 +60,32 @@ $kms->createKey('tenant-42');
 $dataKey = $kms->generateDataKey('tenant-42'); // {plaintext, wrapped}
 $kms->rotateKey('tenant-42');                  // non-destructive
 ```
+
+### AWS KMS (production BYOK)
+
+Requires `aws/aws-sdk-php` (`composer require aws/aws-sdk-php`). It uses **one
+Customer Master Key (CMK) per tenant** (alias `alias/{prefix}{tenant}`), so
+crypto-shredding one tenant never touches another. DEKs are generated, wrapped
+and unwrapped *inside* KMS — the plaintext KEK never leaves AWS.
+
+```dotenv
+RAG_KMS=aws
+RAG_AWS_KMS_REGION=eu-west-1
+# Credentials resolve via the standard AWS chain (env / profile / IAM role);
+# set these only to override:
+# RAG_AWS_KMS_KEY=...
+# RAG_AWS_KMS_SECRET=...
+# RAG_AWS_KMS_ALIAS_PREFIX=alias/rag-
+# RAG_AWS_KMS_DELETION_WINDOW=7      # days (AWS enforces 7–30)
+```
+
+::: callout warning "AWS crypto-shred is disable-now, delete-later"
+`destroyKey()` (and `rag:purge`) **disables** the tenant's CMK immediately —
+making the data instantly undecryptable — then **schedules** its deletion within
+the AWS-enforced 7–30 day window. The key is unusable at once; permanent deletion
+completes after the window. Each tenant CMK incurs the standard AWS KMS monthly
+cost.
+:::
 
 ## Crypto-shredding (right to erasure)
 

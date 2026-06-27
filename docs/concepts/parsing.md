@@ -48,10 +48,38 @@ $parsed->language;   // detected language (filled in during preprocessing)
 | PDF | `application/pdf` | Text-based PDFs, via the optional `smalot/pdfparser` package. |
 
 ::: callout tip "PDFs are text, not images"
-A PDF parser extracts the *text layer* of a PDF. A scanned document (an image of
-text) has no text layer, so it parses to nothing — that needs OCR, which is out
-of scope here. If you must support scans, OCR them to text first, then ingest the
-text.
+A PDF parser extracts the *text layer* of a PDF. A **scanned** document (an image
+of text) has no text layer — for those, enable **OCR** (below).
+:::
+
+## Scanned PDFs & OCR
+
+When a PDF yields little or no extractable text (a scan), the parser can fall
+back to **OCR**. OCR is a pluggable engine, off by default:
+
+| Driver (`RAG_OCR`) | What it does |
+|---|---|
+| `null` (default) | No OCR — scanned PDFs parse to empty. |
+| `tesseract` | Shells out to the Tesseract binary (and `pdftoppm` to rasterise PDF pages). |
+
+Enable it:
+
+```dotenv
+RAG_OCR=tesseract
+# requires the `tesseract` (and, for PDFs, poppler's `pdftoppm`) binaries on the host
+# RAG_OCR_LANG=eng
+# RAG_OCR_MIN_CHARS=16     # below this many extracted chars, treat the PDF as a scan and OCR it
+```
+
+How the fallback works: after extracting the text layer, if its length is below
+`ocr_min_chars` and an OCR engine is configured, the parser OCRs the file and uses
+that text instead (marking `metadata.ocr = true`). Text PDFs are unaffected — OCR
+only kicks in when there's nothing to extract.
+
+::: callout info "Bring your own OCR engine"
+Implement the `Sellinnate\RagEngine\Contracts\Ocr` contract and register it via
+`OcrManager::extend()` to use a cloud OCR (AWS Textract, Google Vision, Azure) —
+same seam, no parser changes. See **[Custom drivers](/guides/custom-drivers)**.
 :::
 
 ## Structure is preserved, not flattened

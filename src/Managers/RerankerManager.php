@@ -10,6 +10,7 @@ use Sellinnate\RagEngine\Reranking\CohereReranker;
 use Sellinnate\RagEngine\Reranking\FakeReranker;
 use Sellinnate\RagEngine\Reranking\JinaReranker;
 use Sellinnate\RagEngine\Reranking\NullReranker;
+use Sellinnate\RagEngine\Reranking\RetryingReranker;
 
 /**
  * Resolves rerankers (FR-RR-01). Ships the no-op `null`, deterministic `fake`,
@@ -50,13 +51,13 @@ final class RerankerManager extends DriverManager
      */
     protected function createCohereDriver(array $config): Reranker
     {
-        return new CohereReranker(
+        return $this->withRetries(new CohereReranker(
             $this->app->make(HttpFactory::class),
             (string) ($config['model'] ?? 'rerank-v3.5'),
             isset($config['api_key']) ? (string) $config['api_key'] : null,
             (string) ($config['base_url'] ?? 'https://api.cohere.com'),
             $config,
-        );
+        ), $config);
     }
 
     /**
@@ -64,12 +65,26 @@ final class RerankerManager extends DriverManager
      */
     protected function createJinaDriver(array $config): Reranker
     {
-        return new JinaReranker(
+        return $this->withRetries(new JinaReranker(
             $this->app->make(HttpFactory::class),
             (string) ($config['model'] ?? 'jina-reranker-v2-base-multilingual'),
             isset($config['api_key']) ? (string) $config['api_key'] : null,
             (string) ($config['base_url'] ?? 'https://api.jina.ai'),
             $config,
-        );
+        ), $config);
+    }
+
+    /**
+     * Wrap a reranker with retry/backoff unless `retries` is disabled in config.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function withRetries(Reranker $reranker, array $config): Reranker
+    {
+        if (($config['retries'] ?? true) === false) {
+            return $reranker;
+        }
+
+        return new RetryingReranker($reranker, maxAttempts: (int) ($config['max_attempts'] ?? 3));
     }
 }

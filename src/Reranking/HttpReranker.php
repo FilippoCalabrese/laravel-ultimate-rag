@@ -8,7 +8,7 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
 use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Data\SearchHit;
-use Sellinnate\RagEngine\Exceptions\RagException;
+use Sellinnate\RagEngine\Exceptions\ProviderException;
 
 /**
  * Base class for HTTP cross-encoder reranker drivers (FR-RR-01).
@@ -50,12 +50,7 @@ abstract class HttpReranker implements Reranker
         ]);
 
         if ($response->failed()) {
-            throw new RagException(sprintf(
-                'Reranker [%s] failed with status %d: %s',
-                $this->name(),
-                $response->status(),
-                mb_substr($response->body(), 0, 300),
-            ));
+            throw ProviderException::fromStatus($this->name(), $response->status(), $response->body());
         }
 
         return $this->mapResults($response->json(), $hits, $topK);

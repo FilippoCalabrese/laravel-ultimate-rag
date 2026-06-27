@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Sellinnate\RagEngine\Managers;
 
+use Aws\Kms\KmsClient;
 use Sellinnate\RagEngine\Contracts\KeyManagement;
+use Sellinnate\RagEngine\Exceptions\RagException;
 use Sellinnate\RagEngine\Security\AeadCipher;
 use Sellinnate\RagEngine\Security\Kms\ArrayKeyStore;
+use Sellinnate\RagEngine\Security\Kms\AwsKms;
 use Sellinnate\RagEngine\Security\Kms\FileKeyStore;
 use Sellinnate\RagEngine\Security\Kms\LocalKms;
 
@@ -42,5 +45,33 @@ final class KmsManager extends DriverManager
             : new ArrayKeyStore;
 
         return new LocalKms($store, $cipher);
+    }
+
+    /**
+     * AWS KMS driver. Requires `aws/aws-sdk-php`. Credentials resolve via the
+     * standard AWS provider chain unless `key`/`secret` are given in config.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    protected function createAwsDriver(array $config): KeyManagement
+    {
+        if (! class_exists(KmsClient::class)) {
+            throw new RagException('The AWS KMS driver requires aws/aws-sdk-php (composer require aws/aws-sdk-php).');
+        }
+
+        $args = [
+            'region' => (string) ($config['region'] ?? 'us-east-1'),
+            'version' => (string) ($config['version'] ?? 'latest'),
+        ];
+
+        if (! empty($config['key']) && ! empty($config['secret'])) {
+            $args['credentials'] = ['key' => (string) $config['key'], 'secret' => (string) $config['secret']];
+        }
+
+        return new AwsKms(
+            new KmsClient($args),
+            aliasPrefix: (string) ($config['alias_prefix'] ?? 'alias/rag-'),
+            deletionWindowDays: (int) ($config['deletion_window_days'] ?? 7),
+        );
     }
 }

@@ -22,6 +22,7 @@ return [
         'kms' => env('RAG_KMS', 'local'),
         'tokenizer' => env('RAG_TOKENIZER', 'approximate'),
         'llm' => env('RAG_LLM', 'null'),
+        'ocr' => env('RAG_OCR', 'null'),
         'chunker' => env('RAG_CHUNK_STRATEGY', 'recursive'),
         'distance_metric' => env('RAG_DISTANCE_METRIC', 'cosine'),
     ],
@@ -209,6 +210,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | OCR for scanned PDFs / images (FR-PA-02)
+    |--------------------------------------------------------------------------
+    |
+    | When a PDF has no text layer (a scan) the parser falls back to OCR if a
+    | non-null engine is selected via `defaults.ocr`. The `tesseract` driver
+    | shells out to the Tesseract binary (and `pdftoppm` to rasterise PDF pages).
+    |
+    */
+    'ocr' => [
+        'null' => ['driver' => 'null'],
+        'tesseract' => [
+            'driver' => 'tesseract',
+            'bin' => env('RAG_TESSERACT_BIN', 'tesseract'),
+            'lang' => env('RAG_OCR_LANG', 'eng'),
+            'pdftoppm' => env('RAG_PDFTOPPM_BIN', 'pdftoppm'),
+        ],
+    ],
+
+    // If a parsed PDF yields fewer than this many characters, treat it as a scan
+    // and try OCR (when an OCR engine is configured).
+    'ocr_min_chars' => env('RAG_OCR_MIN_CHARS', 16),
+
+    /*
+    |--------------------------------------------------------------------------
     | KMS / BYOK (FR-SEC)
     |--------------------------------------------------------------------------
     */
@@ -222,8 +247,20 @@ return [
             'master_key' => env('RAG_KMS_MASTER_KEY'),
             'keystore' => env('RAG_KMS_KEYSTORE', storage_path('rag-engine/kms')),
         ],
-        // Cloud drivers (AWS KMS, GCP KMS, Azure Key Vault, Vault) are registered
-        // by the consumer via KmsManager::extend() — they are not bundled.
+        // AWS KMS (production BYOK). Requires aws/aws-sdk-php. One CMK per tenant
+        // (alias alias/{prefix}{tenant}); credentials resolve via the AWS chain
+        // unless key/secret are set. Set RAG_KMS=aws to use it.
+        'aws' => [
+            'driver' => 'aws',
+            'region' => env('RAG_AWS_KMS_REGION', env('AWS_DEFAULT_REGION', 'us-east-1')),
+            'key' => env('RAG_AWS_KMS_KEY', env('AWS_ACCESS_KEY_ID')),
+            'secret' => env('RAG_AWS_KMS_SECRET', env('AWS_SECRET_ACCESS_KEY')),
+            'alias_prefix' => env('RAG_AWS_KMS_ALIAS_PREFIX', 'alias/rag-'),
+            'deletion_window_days' => env('RAG_AWS_KMS_DELETION_WINDOW', 7),
+        ],
+
+        // Other cloud drivers (GCP KMS, Azure Key Vault, Vault) can be registered
+        // by the consumer via KmsManager::extend().
     ],
 
     /*

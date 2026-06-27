@@ -41,7 +41,12 @@
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan-deprecation-rules": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
-        "smalot/pdfparser": "^2.0"
+        "smalot/pdfparser": "^2.0",
+        "aws/aws-sdk-php": "^3.300"
+    },
+    "suggest": {
+        "smalot/pdfparser": "Parse text-based PDF documents",
+        "aws/aws-sdk-php": "Use AWS KMS as the BYOK key-management driver (kms.aws)"
     },
     "autoload": {
         "psr-4": {

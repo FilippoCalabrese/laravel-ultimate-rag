@@ -10,6 +10,7 @@ use Sellinnate\RagEngine\Generation\AnthropicLlm;
 use Sellinnate\RagEngine\Generation\FakeLlm;
 use Sellinnate\RagEngine\Generation\NullLlm;
 use Sellinnate\RagEngine\Generation\OpenAiLlm;
+use Sellinnate\RagEngine\Generation\RetryingLlm;
 
 /**
  * Resolves optional LLM backends (FR-GE-02). Default is the no-op driver so the
@@ -51,13 +52,13 @@ final class LlmManager extends DriverManager
      */
     protected function createAnthropicDriver(array $config): Llm
     {
-        return new AnthropicLlm(
+        return $this->withRetries(new AnthropicLlm(
             $this->app->make(HttpFactory::class),
             (string) ($config['model'] ?? 'claude-sonnet-4-6'),
             isset($config['api_key']) ? (string) $config['api_key'] : null,
             (string) ($config['base_url'] ?? 'https://api.anthropic.com'),
             $config,
-        );
+        ), $config);
     }
 
     /**
@@ -65,12 +66,26 @@ final class LlmManager extends DriverManager
      */
     protected function createOpenaiDriver(array $config): Llm
     {
-        return new OpenAiLlm(
+        return $this->withRetries(new OpenAiLlm(
             $this->app->make(HttpFactory::class),
             (string) ($config['model'] ?? 'gpt-4o-mini'),
             isset($config['api_key']) ? (string) $config['api_key'] : null,
             (string) ($config['base_url'] ?? 'https://api.openai.com/v1'),
             $config,
-        );
+        ), $config);
+    }
+
+    /**
+     * Wrap a driver with retry/backoff unless `retries` is disabled in config.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function withRetries(Llm $llm, array $config): Llm
+    {
+        if (($config['retries'] ?? true) === false) {
+            return $llm;
+        }
+
+        return new RetryingLlm($llm, maxAttempts: (int) ($config['max_attempts'] ?? 3));
     }
 }

@@ -112,13 +112,26 @@ it('OpenAiLlm streams content deltas and stops at [DONE]', function () {
 });
 
 it('LlmManager resolves the anthropic and openai drivers from config', function () {
-    config()->set('rag-engine.llms.anthropic', ['driver' => 'anthropic', 'api_key' => 'k', 'model' => 'claude-sonnet-4-6']);
-    config()->set('rag-engine.llms.openai', ['driver' => 'openai', 'api_key' => 'k', 'model' => 'gpt-4o-mini']);
+    config()->set('rag-engine.llms.anthropic', ['driver' => 'anthropic', 'api_key' => 'k', 'model' => 'claude-sonnet-4-6', 'retries' => false]);
+    config()->set('rag-engine.llms.openai', ['driver' => 'openai', 'api_key' => 'k', 'model' => 'gpt-4o-mini', 'retries' => false]);
 
     $manager = app(LlmManager::class)->forgetDrivers();
 
     expect($manager->driver('anthropic'))->toBeInstanceOf(AnthropicLlm::class)
         ->and($manager->driver('openai'))->toBeInstanceOf(OpenAiLlm::class);
+});
+
+it('the configured anthropic driver retries a transient 429 then succeeds', function () {
+    Http::fake(['*/v1/messages' => Http::sequence()
+        ->push('rate limited', 429)
+        ->push(['content' => [['type' => 'text', 'text' => 'Recovered.']]], 200)]);
+
+    config()->set('rag-engine.llms.anthropic.api_key', 'k');
+
+    $answer = app(LlmManager::class)->driver('anthropic')->generate('hi');
+
+    expect($answer)->toBe('Recovered.');
+    Http::assertSentCount(2);
 });
 
 it('Rag::ask()->using(anthropic) generates a cited answer end to end', function () {

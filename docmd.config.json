@@ -63,6 +63,7 @@
       "icon": "compass",
       "children": [
         { "title": "Ingesting content", "path": "/guides/ingestion", "icon": "upload" },
+        { "title": "Evaluating quality", "path": "/guides/evaluation", "icon": "gauge" },
         { "title": "Custom drivers", "path": "/guides/custom-drivers", "icon": "puzzle" }
       ]
     },
