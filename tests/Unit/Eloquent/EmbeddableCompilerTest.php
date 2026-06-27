@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Sellinnate\RagEngine\Contracts\Embeddable;
 use Sellinnate\RagEngine\Eloquent\EmbeddableCompiler;
 use Sellinnate\RagEngine\Eloquent\EmbeddableDefinition;
+use Sellinnate\RagEngine\Exceptions\RagException;
 
 /**
  * A minimal, non-Eloquent embeddable for compiler unit tests.
@@ -196,6 +197,18 @@ it('stringifies scalar field values', function () {
         ->and($parts[1]['value'])->toBe('1')
         ->and($parts[2]['value'])->toBe('0');
 });
+
+it('throws when a file field is declared but no file resolver is configured', function () {
+    $embeddable = new class implements Embeddable
+    {
+        public function toEmbeddable(): EmbeddableDefinition
+        {
+            return EmbeddableDefinition::make()->add('Title', 'X')->addFile('Doc', '/tmp/x.pdf');
+        }
+    };
+
+    (new EmbeddableCompiler)->compile($embeddable);
+})->throws(RagException::class, 'file resolver');
 
 it('produces a stable checksum that changes with content', function () {
     $a = (new EmbeddableCompiler)->compile((new FakeEmbeddable('1'))->field('Title', 'One'));

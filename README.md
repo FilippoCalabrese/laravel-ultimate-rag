@@ -4,7 +4,7 @@
 
 # RAG Engine for Laravel
 
-[![Tests](https://img.shields.io/badge/tests-401%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-410%20passing-brightgreen)]()
 [![Coverage](https://img.shields.io/badge/coverage-%E2%89%A590%25-brightgreen)]()
 [![PHPStan](https://img.shields.io/badge/PHPStan-level%208-blue)]()
 [![PHP](https://img.shields.io/badge/PHP-8.2%2B-777bb4)]()
@@ -173,7 +173,10 @@ class Article extends Model implements Embeddable
 $article = Rag::models()->resolve($hits[0]); // App\Models\Article instance, or null
 ```
 
-See **[docs/concepts/eloquent-models.md](docs/concepts/eloquent-models.md)**.
+Model **file fields** (a PDF/DOCX upload) can be embedded too — `addFile()` parses
+the file to text and folds it into the model's embedding; non-embeddable binaries
+(zip/exe…) are skipped or rejected per policy. See
+**[docs/concepts/eloquent-models.md](docs/concepts/eloquent-models.md)**.
 
 ## Asking questions with an LLM
 
@@ -324,7 +327,7 @@ npm run docs:build   # static site into ./site
 ## Testing & development
 
 ```bash
-composer test         # run the Pest suite (401 tests)
+composer test         # run the Pest suite (410 tests)
 composer analyse      # PHPStan, level 8
 composer format       # Laravel Pint (code style)
 
@@ -332,7 +335,7 @@ composer format       # Laravel Pint (code style)
 XDEBUG_MODE=coverage vendor/bin/pest --coverage --min=90
 ```
 
-Quality gates kept green on every change: **401 tests**, **PHPStan level 8**,
+Quality gates kept green on every change: **410 tests**, **PHPStan level 8**,
 **Pint** clean, **≥90% coverage**.
 
 ## License

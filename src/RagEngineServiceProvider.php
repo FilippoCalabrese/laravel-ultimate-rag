@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Sellinnate\RagEngine;
 
 use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Http\Client\Factory;
 use Sellinnate\RagEngine\Audit\AuditLogger;
 use Sellinnate\RagEngine\Chunking\ChunkingService;
@@ -22,6 +23,7 @@ use Sellinnate\RagEngine\Contracts\Reranker;
 use Sellinnate\RagEngine\Contracts\Tokenizer;
 use Sellinnate\RagEngine\Contracts\VectorStore;
 use Sellinnate\RagEngine\Eloquent\EmbeddableCompiler;
+use Sellinnate\RagEngine\Eloquent\EmbeddableFileResolver;
 use Sellinnate\RagEngine\Eloquent\ModelEmbedder;
 use Sellinnate\RagEngine\Embedding\EmbeddingService;
 use Sellinnate\RagEngine\Exceptions\RagException;
@@ -285,8 +287,16 @@ class RagEngineServiceProvider extends PackageServiceProvider
 
     private function registerEloquent(): void
     {
+        $this->app->singleton(EmbeddableFileResolver::class, fn ($app) => new EmbeddableFileResolver(
+            $app->make(ParserManager::class),
+            $app->make(FilesystemFactory::class),
+            onUnparsable: (string) $app->make('config')->get('rag-engine.eloquent.on_unparsable_file', 'skip'),
+            maxBytes: (int) $app->make('config')->get('rag-engine.eloquent.max_file_bytes', 26_214_400),
+        ));
+
         $this->app->singleton(EmbeddableCompiler::class, fn ($app) => new EmbeddableCompiler(
             (int) $app->make('config')->get('rag-engine.eloquent.max_depth', 3),
+            $app->make(EmbeddableFileResolver::class),
         ));
 
         $this->app->singleton(ModelEmbedder::class, fn ($app) => new ModelEmbedder(

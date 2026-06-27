@@ -60,6 +60,7 @@ model's embedded representation:
 | `text($value)` | An unlabelled block of text. |
 | `include(?Embeddable $related, ?string $as)` | Compose one related embeddable (recursive). Null is ignored. |
 | `includeMany(iterable $related, ?string $as)` | Compose a collection of related embeddables. |
+| `addFile(string $label, ?string $path, ?string $disk, ?string $mime)` | Embed the **text of an uploaded file** (PDF, DOCX…). See [file fields](#file-fields). |
 | `metadata(array $meta)` | Provenance metadata stored on the document. |
 | `documentKey(string $key)` | Override the logical key (defaults to the model's `type:id`). |
 | `options(array $opts)` | Per-model chunking/indexing options. |
@@ -79,6 +80,78 @@ Post → Comment → Post terminates cleanly.
 
 The composed document is what gets chunked and embedded, so a query matching a
 comment or the author's bio still retrieves — and resolves to — the parent post.
+
+## Embedding file fields (PDF, DOCX…) {#file-fields}
+
+If a model has an **uploaded file** (a PDF contract, a DOCX report…), you can
+fold its text straight into the model's embedding with `addFile()`. The engine
+reads the file, parses it to text with the same parsers used for ingestion
+(PDF, DOCX, HTML, CSV, JSON, XML, Markdown, text), and includes it under the
+given label — so the file becomes searchable *as part of the model* and a hit
+still resolves back to that model.
+
+```php
+class Contract extends Model implements Embeddable
+{
+    use HasEmbeddings;
+
+    public function toEmbeddable(): EmbeddableDefinition
+    {
+        return EmbeddableDefinition::make()
+            ->add('Title', $this->title)
+            // A file stored on a Laravel disk (e.g. 's3'):
+            ->addFile('Document', $this->document_path, 's3')
+            // ...or a local absolute path (omit the disk):
+            ->addFile('Appendix', $this->appendix_absolute_path);
+    }
+}
+```
+
+- **`$disk`** — a Laravel filesystem disk name (`config/filesystems.php`). Omit it
+  to treat `$path` as a local absolute path.
+- **`$mime`** — optional; detected from the file extension/content when omitted.
+- A **null/blank `$path` is ignored**, so nullable upload columns are safe.
+
+::: callout info "PDF support needs one extra package"
+PDF parsing uses the optional `smalot/pdfparser` package — run
+`composer require smalot/pdfparser` to enable it. Without it, PDFs are treated as
+non-embeddable (see below). DOCX/HTML/CSV/JSON/XML/Markdown/text need nothing extra.
+:::
+
+### Non-embeddable files (zip, executables, images…)
+
+Not every file can become text. A `.zip`, an executable, an image, a corrupt
+file, a missing path, or one over the size limit **can't be embedded** — and the
+engine never sends raw binary to an embedding provider. What happens is governed
+by `rag-engine.eloquent.on_unparsable_file`:
+
+| Policy | Behaviour |
+|---|---|
+| `skip` (default) | Logs a warning and **embeds the rest of the model** (other fields/relations). The bad file simply contributes nothing. |
+| `fail` | Throws `Sellinnate\RagEngine\Exceptions\UnsupportedFileException`, so the sync fails loudly. |
+
+```dotenv
+# .env
+RAG_ELOQUENT_ON_UNPARSABLE_FILE=skip      # skip | fail
+RAG_ELOQUENT_MAX_FILE_BYTES=26214400      # largest file the engine will read (bytes)
+```
+
+```php
+// Handle strict mode explicitly when you want to surface the error to the user:
+use Sellinnate\RagEngine\Exceptions\UnsupportedFileException;
+
+try {
+    $contract->syncEmbedding();
+} catch (UnsupportedFileException $e) {
+    // e.g. "Cannot embed file — file [archive.zip] is not embeddable: no parser for type [application/zip] ..."
+}
+```
+
+::: callout tip "Which to choose?"
+Use **`skip`** (default) for user uploads where a non-text attachment shouldn't
+block indexing the record. Use **`fail`** when a model *must* have an embeddable
+document and you want to catch mistakes early.
+:::
 
 ## Keeping the index in sync
 

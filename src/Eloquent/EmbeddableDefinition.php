@@ -22,6 +22,9 @@ final class EmbeddableDefinition
     /** @var list<array{relation: string, embeddable: Embeddable}> */
     private array $included = [];
 
+    /** @var list<array{label: string, path: string, disk: string|null, mime: string|null}> */
+    private array $files = [];
+
     /** @var array<string, mixed> */
     private array $metadata = [];
 
@@ -56,6 +59,28 @@ final class EmbeddableDefinition
     public function text(string|int|float|bool|null $value): self
     {
         return $this->add('', $value);
+    }
+
+    /**
+     * Embed the text of a file field (PDF, DOCX, HTML, CSV…). The engine reads
+     * the file, parses it to text with the registered parsers, and folds that
+     * text into the model's embedding under the given label.
+     *
+     * - `$disk` is a Laravel filesystem disk name (e.g. 's3'); omit it to treat
+     *   `$path` as a local absolute path.
+     * - `$mimeType` is optional — detected from the file when not given.
+     * - Null/blank paths are ignored (safe for nullable upload columns).
+     *
+     * Non-embeddable files (zip, executables, images, unreadable or too large)
+     * are handled per `rag-engine.eloquent.on_unparsable_file` (skip | fail).
+     */
+    public function addFile(string $label, ?string $path, ?string $disk = null, ?string $mimeType = null): self
+    {
+        if (is_string($path) && trim($path) !== '') {
+            $this->files[] = ['label' => $label, 'path' => $path, 'disk' => $disk, 'mime' => $mimeType];
+        }
+
+        return $this;
     }
 
     /**
@@ -135,6 +160,12 @@ final class EmbeddableDefinition
         return $this->included;
     }
 
+    /** @return list<array{label: string, path: string, disk: string|null, mime: string|null}> */
+    public function files(): array
+    {
+        return $this->files;
+    }
+
     /** @return array<string, mixed> */
     public function metadataArray(): array
     {
@@ -153,11 +184,11 @@ final class EmbeddableDefinition
     }
 
     /**
-     * True when this definition has neither own text nor included embeddables.
+     * True when this definition has no text, files, nor included embeddables.
      */
     public function isEmpty(): bool
     {
-        return $this->parts === [] && $this->included === [];
+        return $this->parts === [] && $this->included === [] && $this->files === [];
     }
 
     private function stringify(string|int|float|bool|null $value): string

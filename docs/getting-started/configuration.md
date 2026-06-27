@@ -144,6 +144,10 @@ Every document and query is automatically scoped to the current tenant. See
     'queue'     => env('RAG_ELOQUENT_QUEUE', false),     // do it on a queue (recommended in prod)
     'max_depth' => env('RAG_ELOQUENT_MAX_DEPTH', 3),     // how deep to compose related models
     'namespace' => env('RAG_ELOQUENT_NAMESPACE'),        // null = share the default namespace
+
+    // File fields (addFile): what to do with a non-embeddable file (zip/exe/…).
+    'on_unparsable_file' => env('RAG_ELOQUENT_ON_UNPARSABLE_FILE', 'skip'), // skip | fail
+    'max_file_bytes'     => env('RAG_ELOQUENT_MAX_FILE_BYTES', 25 * 1024 * 1024),
 ],
 ```
 

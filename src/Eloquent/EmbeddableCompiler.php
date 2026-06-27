@@ -6,19 +6,23 @@ namespace Sellinnate\RagEngine\Eloquent;
 
 use Illuminate\Database\Eloquent\Model;
 use Sellinnate\RagEngine\Contracts\Embeddable;
+use Sellinnate\RagEngine\Exceptions\RagException;
 
 /**
  * Compiles an {@see Embeddable} into a single composed document (FR-DX-05).
  *
  * Related embeddables declared via the definition are rendered recursively and
  * inlined under labelled sections, so the parent's embedding "contains" the
- * embedding of its relations. Recursion is bounded by {@see $maxDepth} and
- * guarded against cycles, so a graph like Post → Comment → Post terminates.
+ * embedding of its relations. File fields (PDF/DOCX/…) are read and parsed to
+ * text via the {@see EmbeddableFileResolver}. Recursion is bounded by
+ * {@see $maxDepth} and guarded against cycles, so a graph like
+ * Post → Comment → Post terminates.
  */
 final class EmbeddableCompiler
 {
     public function __construct(
         private readonly int $maxDepth = 3,
+        private readonly ?EmbeddableFileResolver $fileResolver = null,
     ) {}
 
     public function compile(Embeddable $root): CompiledEmbeddable
@@ -67,6 +71,16 @@ final class EmbeddableCompiler
                 : '['.$part['label'].']'."\n".$part['value'];
         }
 
+        foreach ($definition->files() as $file) {
+            $text = $this->resolveFile($file);
+
+            if ($text !== null && trim($text) !== '') {
+                $blocks[] = $file['label'] === ''
+                    ? $text
+                    : '['.$file['label'].']'."\n".$text;
+            }
+        }
+
         if ($depth < $this->maxDepth) {
             foreach ($definition->included() as $included) {
                 $childText = $this->render($included['embeddable'], $depth + 1, $visited, $includedKeys);
@@ -82,6 +96,21 @@ final class EmbeddableCompiler
         }
 
         return implode("\n\n", array_filter($blocks, static fn (string $block): bool => trim($block) !== ''));
+    }
+
+    /**
+     * @param  array{label: string, path: string, disk: string|null, mime: string|null}  $file
+     */
+    private function resolveFile(array $file): ?string
+    {
+        if (! $this->fileResolver instanceof EmbeddableFileResolver) {
+            throw new RagException(
+                'An embeddable declared a file field but no file resolver is configured. '
+                .'Resolve the compiler from the container so parsers are wired in.'
+            );
+        }
+
+        return $this->fileResolver->resolve($file);
     }
 
     /**

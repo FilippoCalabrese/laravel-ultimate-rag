@@ -363,6 +363,15 @@ return [
         // Vector-store namespace for model embeddings. Null = share the default
         // `namespace` above, so `Rag::search()` finds models and documents alike.
         'namespace' => env('RAG_ELOQUENT_NAMESPACE'),
+
+        // What to do with a file field (addFile) that can't be turned into text —
+        // an unsupported binary (zip/exe/image), missing/unreadable, or too big:
+        //   'skip' — log a warning and embed the rest of the model (default)
+        //   'fail' — throw UnsupportedFileException
+        'on_unparsable_file' => env('RAG_ELOQUENT_ON_UNPARSABLE_FILE', 'skip'),
+
+        // Largest file (bytes) the engine will read & parse for a file field.
+        'max_file_bytes' => env('RAG_ELOQUENT_MAX_FILE_BYTES', 25 * 1024 * 1024),
     ],
 
     'chunking' => [
