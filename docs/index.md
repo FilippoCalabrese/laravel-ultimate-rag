@@ -1,7 +1,11 @@
 ---
 title: "RAG Engine for Laravel"
 description: "Enterprise Retrieval-Augmented Generation infrastructure for Laravel — semantic search and AI answers over your own content."
+image: "https://laravel-rag-engine.selli.io/assets/banner.png"
+ogImage: "https://laravel-rag-engine.selli.io/assets/banner.png"
 ---
+
+![RAG Engine for Laravel — semantic search & AI answers](/assets/banner.png)
 
 # RAG Engine for Laravel
 

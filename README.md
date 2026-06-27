@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="art/banner.png" alt="RAG Engine for Laravel — semantic search &amp; AI answers" width="100%">
+</p>
+
 # RAG Engine for Laravel
 
 [![Tests](https://img.shields.io/badge/tests-401%20passing-brightgreen)]()
