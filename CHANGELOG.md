@@ -2,6 +2,19 @@
 
 All notable changes to `:package_name` will be documented in this file.
 
+## v1.1.1 — fix PHPStan CI (console input typing) - 2026-06-27
+
+Patch release. No runtime or behaviour change.
+
+### Fix
+
+- The standalone **PHPStan** CI workflow (PHP 8.5 + latest larastan) failed on console commands casting `mixed` `argument()`/`option()` values to `string` — an unsound cast that older local larastan didn't flag (the run-tests matrix was always green; PHPStan had been red since v1.0.0).
+- Added `Console\Concerns\NormalizesInput` (`stringArgument(): string`, `stringOption(): ?string`) and used it across all six Artisan commands. No more `mixed → string` casts.
+
+Verified against the same larastan version CI installs: PHPStan level 8 clean. Suite 410 green; **both** run-tests and PHPStan CI green.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
 ## v1.1.0 — embeddable file fields (PDF/DOCX) + binary handling - 2026-06-27
 
 ### What's new
@@ -22,6 +35,7 @@ public function toEmbeddable(): EmbeddableDefinition
         ->add('Title', $this->title)
         ->addFile('Document', $this->document_path, 's3'); // PDF/DOCX on a disk
 }
+
 
 ```
 > PDF support uses the optional `smalot/pdfparser` package (`composer require smalot/pdfparser`). Other formats need nothing extra.
@@ -63,6 +77,7 @@ PHP 8.2+ · Laravel 11, 12 or 13.
 
 ```bash
 composer require sellinnate/rag-engine
+
 
 
 ```
