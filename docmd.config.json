@@ -1,6 +1,6 @@
 {
   "title": "RAG Engine for Laravel",
-  "url": "https://sellinnate.github.io/rag-engine",
+  "url": "https://laravel-rag-engine.selli.io",
   "src": "docs",
   "out": "site",
   "engine": "js",
